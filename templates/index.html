@@ -173,6 +173,55 @@
             padding: 40px;
             font-size: 1.1em;
         }
+        
+        .preload-status {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin: 20px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+        
+        .store-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 0.9em;
+            font-weight: 500;
+        }
+        
+        .status-loading {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .status-ready {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status-error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
@@ -190,6 +239,20 @@
             <button id="searchBtn" onclick="searchGrocery()">Search</button>
         </div>
         
+        <div class="preload-status" id="preloadStatus">
+            <div class="store-status status-loading" id="status-carrefour">
+                <div class="spinner"></div>
+                <span>Carrefour: Loading...</span>
+            </div>
+            <div class="store-status status-loading" id="status-noon">
+                <div class="spinner"></div>
+                <span>Noon: Loading...</span>
+            </div>
+            <div class="store-status status-ready" id="status-talabat">
+                <span>✓ Talabat: Ready</span>
+            </div>
+        </div>
+        
         <div class="loading" id="loading">
             🔍 Searching stores...
         </div>
@@ -199,6 +262,45 @@
     </div>
 
     <script>
+        // Poll preload status on page load
+        async function checkPreloadStatus() {
+            try {
+                const response = await fetch('/status');
+                const status = await response.json();
+                
+                // Update UI for each store
+                Object.keys(status).forEach(store => {
+                    const statusElem = document.getElementById(`status-${store}`);
+                    if (!statusElem) return;
+                    
+                    const state = status[store];
+                    statusElem.className = 'store-status';
+                    
+                    if (state === 'loading') {
+                        statusElem.className += ' status-loading';
+                        statusElem.innerHTML = `<div class="spinner"></div><span>${store.charAt(0).toUpperCase() + store.slice(1)}: Loading...</span>`;
+                    } else if (state === 'ready') {
+                        statusElem.className += ' status-ready';
+                        statusElem.innerHTML = `<span>✓ ${store.charAt(0).toUpperCase() + store.slice(1)}: Ready</span>`;
+                    } else if (state === 'error') {
+                        statusElem.className += ' status-error';
+                        statusElem.innerHTML = `<span>✗ ${store.charAt(0).toUpperCase() + store.slice(1)}: Error</span>`;
+                    }
+                });
+                
+                // Keep polling if any store is still loading
+                const stillLoading = Object.values(status).some(s => s === 'loading' || s === 'not_started');
+                if (stillLoading) {
+                    setTimeout(checkPreloadStatus, 500);
+                }
+            } catch (error) {
+                console.error('Error checking preload status:', error);
+            }
+        }
+        
+        // Start polling on page load
+        window.addEventListener('DOMContentLoaded', checkPreloadStatus);
+        
         async function searchGrocery() {
             const input = document.getElementById('searchInput');
             const searchBtn = document.getElementById('searchBtn');

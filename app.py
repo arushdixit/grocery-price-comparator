@@ -24,6 +24,13 @@ _browser_pool = {
     'noon': None
 }
 
+# Browser preload status
+_preload_status = {
+    'carrefour': 'not_started',  # not_started, loading, ready, error
+    'noon': 'not_started',
+    'talabat': 'ready'  # Talabat doesn't use Selenium
+}
+
 def get_chrome_driver():
     """Create a new Chrome driver with standard options"""
     chrome_options = Options()
@@ -285,6 +292,11 @@ def search_talabat(item):
 def index():
     return render_template('index.html')
 
+@app.route('/status')
+def status():
+    """Return browser preload status"""
+    return jsonify(_preload_status)
+
 @app.route('/search', methods=['POST'])
 def search():
     item = request.json.get('item', '')
@@ -306,21 +318,51 @@ def search():
     
     return jsonify(results)
 
-def preload_browsers():
-    """Preload browsers on startup for faster first query"""
-    print("[Startup] Preloading browsers...")
+def preload_single_browser(store_name, base_url, cookies_file):
+    """Preload a single browser"""
+    global _preload_status
     try:
-        # Preload Carrefour
-        get_or_create_browser('Carrefour', 'https://www.carrefouruae.com/mafuae/en/', CARREFOUR_COOKIES_FILE)
-        print("[Startup] Carrefour browser ready")
-        
-        # Preload Noon
-        get_or_create_browser('Noon', 'https://minutes.noon.com/uae-en/', NOON_COOKIES_FILE)
-        print("[Startup] Noon browser ready")
-        
-        print("[Startup] All browsers preloaded successfully")
+        _preload_status[store_name.lower()] = 'loading'
+        get_or_create_browser(store_name, base_url, cookies_file)
+        _preload_status[store_name.lower()] = 'ready'
+        print(f"[Startup] {store_name} browser ready")
     except Exception as e:
-        print(f"[Startup] Error preloading browsers: {str(e)}")
+        _preload_status[store_name.lower()] = 'error'
+        print(f"[Startup] Error preloading {store_name}: {str(e)}")
+
+def preload_browsers():
+    """Preload browsers in parallel on startup for faster first query"""
+    print("[Startup] Preloading browsers in parallel...")
+    
+    # Preload both browsers in parallel using ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        carrefour_future = executor.submit(
+            preload_single_browser, 
+            'Carrefour', 
+            'https://www.carrefouruae.com/mafuae/en/', 
+            CARREFOUR_COOKIES_FILE
+        )
+        noon_future = executor.submit(
+            preload_single_browser,
+            'Noon',
+            'https://minutes.noon.com/uae-en/',
+            NOON_COOKIES_FILE
+        )
+        
+        # Wait for both to complete
+        carrefour_future.result()
+        noon_future.result()
+    
+    print("[Startup] Browser preloading complete")
 
 if __name__ == '__main__':
+    # Start browser preloading in background thread
+    # Only run once (not in reloader subprocess)
+    if os.environ.get('WERKZEUG_RUN_MAIN') != 'true':
+        # First run - mark as not started
+        pass
+    else:
+        # Reloader subprocess - start preloading
+        threading.Thread(target=preload_browsers, daemon=True).start()
+    
     app.run(debug=True, host='127.0.0.1', port=5000)

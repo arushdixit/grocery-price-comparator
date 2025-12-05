@@ -12,49 +12,143 @@ from selenium.webdriver.support import expected_conditions as EC
 
 app = Flask(__name__)
 
-# Noon cookies - load from Cookies/noon_minutes.json
+# Cookies files
 NOON_COOKIES_FILE = 'Cookies/noon_minutes.json'
+CARREFOUR_COOKIES_FILE = 'Cookies/carrefour.json'
 
 def search_carrefour(item):
-    """Search Carrefour UAE for item prices"""
+    """Search Carrefour UAE for item prices using Selenium"""
     start_time = time.time()
     print(f"[Carrefour] Starting search for '{item}'...")
+    driver = None
     try:
-        url = f"https://www.carrefouruae.com/mafuae/en/search?keyword={item.replace(' ', '+')}"
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
-        }
-        response = requests.get(url, headers=headers, timeout=10)
+        # Setup Chrome options
+        chrome_options = Options()
+        chrome_options.add_argument('--headless')
+        chrome_options.add_argument('--no-sandbox')
+        chrome_options.add_argument('--disable-dev-shm-usage')
+        chrome_options.add_argument('--disable-blink-features=AutomationControlled')
+        chrome_options.add_argument('user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
         
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.content, 'html.parser')
-            # This is a simplified scraper - actual structure may vary
-            products = []
-            # You'll need to inspect the actual HTML structure
-            product_cards = soup.find_all('div', class_='product-card', limit=5)
-            
-            for card in product_cards:
-                try:
-                    name = card.find('h3', class_='product-title')
-                    price = card.find('span', class_='price')
-                    if name and price:
-                        products.append({
-                            'name': name.text.strip(),
-                            'price': price.text.strip()
-                        })
-                except:
+        # Initialize driver
+        driver = webdriver.Chrome(options=chrome_options)
+        
+        # Navigate to Carrefour first (required to set cookies)
+        driver.get("https://www.carrefouruae.com/mafuae/en/")
+        
+        # Add cookies if provided
+        try:
+            if os.path.exists(CARREFOUR_COOKIES_FILE):
+                with open(CARREFOUR_COOKIES_FILE, 'r') as f:
+                    cookies = json.load(f)
+                    cookie_count = 0
+                    for cookie in cookies:
+                        selenium_cookie = {
+                            'name': cookie['name'],
+                            'value': cookie['value'],
+                            'domain': cookie['domain'],
+                            'path': cookie.get('path', '/'),
+                            'secure': cookie.get('secure', False)
+                        }
+                        if 'expirationDate' in cookie:
+                            selenium_cookie['expiry'] = int(cookie['expirationDate'])
+                        
+                        driver.add_cookie(selenium_cookie)
+                        cookie_count += 1
+                    print(f"[Carrefour] Added {cookie_count} cookies")
+                    driver.refresh()
+            else:
+                print(f"[Carrefour] No cookies file found")
+        except Exception as e:
+            print(f"[Carrefour] Error loading cookies: {str(e)}")
+        
+        # Detect location on homepage
+        time.sleep(2)
+        try:
+            location_elem = driver.find_element(By.CSS_SELECTOR, "div.max-w-\[250px\].truncate, div.max-w-\[220px\].truncate")
+            location_text = location_elem.text.strip()
+            if location_text:
+                print(f"[Carrefour] Detected location: {location_text}")
+            else:
+                print("[Carrefour] ⚠️  Could not detect location")
+        except:
+            print("[Carrefour] ⚠️  Could not detect location - results may be for default area")
+        
+        # Navigate to search URL
+        url = f"https://www.carrefouruae.com/mafuae/en/search?keyword={item.replace(' ', '%20')}"
+        driver.get(url)
+        
+        # Wait for products to load
+        wait = WebDriverWait(driver, 15)
+        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "div[class*='max-w-']")))
+        time.sleep(2)
+        
+        # Parse with BeautifulSoup
+        soup = BeautifulSoup(driver.page_source, 'html.parser')
+        products = []
+        
+        # Find product containers
+        product_containers = soup.find_all('div', class_=lambda x: x and 'max-w-' in str(x) and 'sm:max-w-' in str(x))
+        
+        for container in product_containers[:10]:
+            try:
+                # Find the link with product name (skip labels like "Bestseller")
+                link = container.find('a', href=True)
+                if not link:
                     continue
-            
-            elapsed = time.time() - start_time
-            print(f"[Carrefour] Completed in {elapsed:.2f}s - Found {len(products)} products")
-            return products if products else [{'name': 'No results found', 'price': 'N/A'}]
+                
+                # Extract name from span within the product link (not label)
+                name_div = link.find('div', class_=lambda x: x and 'line-clamp-2' in str(x))
+                if not name_div:
+                    continue
+                name_elem = name_div.find('span')
+                if not name_elem:
+                    continue
+                name = name_elem.text.strip()
+                
+                # Skip if name is empty or is a label like "Bestseller"
+                if not name or name.lower() in ['bestseller', 'new', 'offer']:
+                    continue
+                
+                # Extract description (size/weight info)
+                desc_elem = container.find('div', class_=lambda x: x and 'text-gray-500' in str(x) and 'truncate' in str(x))
+                if desc_elem:
+                    name += f" - {desc_elem.text.strip()}"
+                
+                # Extract price - look for the main price div with force-ltr class
+                price_container = container.find('div', class_=lambda x: x and 'force-ltr' in str(x))
+                if price_container:
+                    # Get the large price number
+                    price_main = price_container.find('div', class_=lambda x: x and 'font-bold' in str(x))
+                    # Get the decimal part
+                    price_decimal_container = price_main.find_next_sibling('div') if price_main else None
+                    
+                    if price_main:
+                        price_text = price_main.text.strip()
+                        if price_decimal_container:
+                            decimal = price_decimal_container.find('div', class_=lambda x: x and 'leading-' in str(x))
+                            if decimal:
+                                price_text += decimal.text.strip()
+                        price_text += " AED"
+                        
+                        products.append({
+                            'name': name,
+                            'price': price_text
+                        })
+            except Exception:
+                continue
+        
         elapsed = time.time() - start_time
-        print(f"[Carrefour] Failed in {elapsed:.2f}s - Status code: {response.status_code}")
-        return [{'name': 'Error fetching data', 'price': 'N/A'}]
+        print(f"[Carrefour] Completed in {elapsed:.2f}s - Found {len(products)} products")
+        return products if products else [{'name': 'No results found', 'price': 'N/A'}]
+        
     except Exception as e:
         elapsed = time.time() - start_time
         print(f"[Carrefour] Error in {elapsed:.2f}s - {str(e)}")
         return [{'name': f'Error: {str(e)}', 'price': 'N/A'}]
+    finally:
+        if driver:
+            driver.quit()
 
 def search_noon(item):
     """Search Noon for item prices using Selenium"""
@@ -195,30 +289,6 @@ def search_talabat(item):
         print(f"[Talabat] Error in {elapsed:.2f}s - {str(e)}")
         return [{'name': f'Error: {str(e)}', 'price': 'N/A'}]
 
-def search_kareem(item):
-    """Search Kareem (Careem) for item prices"""
-    start_time = time.time()
-    print(f"[Kareem] Starting search for '{item}'...")
-    try:
-        # Careem Now/Quik search
-        url = f"https://www.careem.com/en-ae/grocery/search?q={item.replace(' ', '+')}"
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
-        }
-        response = requests.get(url, headers=headers, timeout=10)
-        
-        if response.status_code == 200:
-            # Note: Careem is heavily JavaScript-based, this is a placeholder
-            elapsed = time.time() - start_time
-            print(f"[Kareem] Completed in {elapsed:.2f}s - Placeholder response")
-            return [{'name': 'Careem requires JavaScript (manual search)', 'price': 'N/A'}]
-        elapsed = time.time() - start_time
-        print(f"[Kareem] Failed in {elapsed:.2f}s")
-        return [{'name': 'Error fetching data', 'price': 'N/A'}]
-    except Exception as e:
-        elapsed = time.time() - start_time
-        print(f"[Kareem] Error in {elapsed:.2f}s - {str(e)}")
-        return [{'name': f'Error: {str(e)}', 'price': 'N/A'}]
 
 @app.route('/')
 def index():
@@ -235,8 +305,7 @@ def search():
     results = {
         'carrefour': search_carrefour(item),
         'noon': search_noon(item),
-        'talabat': search_talabat(item),
-        'kareem': search_kareem(item)
+        'talabat': search_talabat(item)
     }
     
     return jsonify(results)

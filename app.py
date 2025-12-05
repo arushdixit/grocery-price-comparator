@@ -31,6 +31,13 @@ _preload_status = {
     'talabat': 'ready'  # Talabat doesn't use Selenium
 }
 
+# Active search status
+_search_status = {
+    'carrefour': 'ready',  # ready, searching, complete
+    'noon': 'ready',
+    'talabat': 'ready'
+}
+
 def get_chrome_driver():
     """Create a new Chrome driver with standard options"""
     chrome_options = Options()
@@ -90,6 +97,8 @@ def get_or_create_browser(store_name, base_url, cookies_file=None):
 
 def search_carrefour(item):
     """Search Carrefour UAE for item prices using Selenium"""
+    global _search_status
+    _search_status['carrefour'] = 'searching'
     start_time = time.time()
     print(f"[Carrefour] Starting search for '{item}'...")
     location = None
@@ -176,6 +185,7 @@ def search_carrefour(item):
         
         elapsed = time.time() - start_time
         print(f"[Carrefour] Completed in {elapsed:.2f}s - Found {len(products)} products")
+        _search_status['carrefour'] = 'complete'
         result = {'products': products if products else [{'name': 'No results found', 'price': 'N/A'}]}
         if location:
             result['location'] = location
@@ -184,10 +194,13 @@ def search_carrefour(item):
     except Exception as e:
         elapsed = time.time() - start_time
         print(f"[Carrefour] Error in {elapsed:.2f}s - {str(e)}")
+        _search_status['carrefour'] = 'complete'
         return {'products': [{'name': f'Error: {str(e)}', 'price': 'N/A'}]}
 
 def search_noon(item):
     """Search Noon for item prices using Selenium"""
+    global _search_status
+    _search_status['noon'] = 'searching'
     start_time = time.time()
     print(f"[Noon] Starting search for '{item}'...")
     location = None
@@ -251,6 +264,7 @@ def search_noon(item):
         
         elapsed = time.time() - start_time
         print(f"[Noon] Completed in {elapsed:.2f}s - Found {len(products)} products")
+        _search_status['noon'] = 'complete'
         result = {'products': products if products else [{'name': 'No results found', 'price': 'N/A'}]}
         if location:
             result['location'] = location
@@ -259,10 +273,13 @@ def search_noon(item):
     except Exception as e:
         elapsed = time.time() - start_time
         print(f"[Noon] Error in {elapsed:.2f}s - {str(e)}")
+        _search_status['noon'] = 'complete'
         return {'products': [{'name': f'Error: {str(e)}', 'price': 'N/A'}]}
 
 def search_talabat(item):
     """Search Talabat for item prices via API"""
+    global _search_status
+    _search_status['talabat'] = 'searching'
     start_time = time.time()
     print(f"[Talabat] Starting search for '{item}'...")
     try:
@@ -305,14 +322,17 @@ def search_talabat(item):
             
             elapsed = time.time() - start_time
             print(f"[Talabat] Completed in {elapsed:.2f}s - Found {len(products)} products")
+            _search_status['talabat'] = 'complete'
             return {'products': products if products else [{'name': 'No results found', 'price': 'N/A'}]}
         else:
             elapsed = time.time() - start_time
             print(f"[Talabat] Failed in {elapsed:.2f}s with status code {response.status_code}")
+            _search_status['talabat'] = 'complete'
             return {'products': [{'name': 'Error fetching data', 'price': 'N/A'}]}
     except Exception as e:
         elapsed = time.time() - start_time
         print(f"[Talabat] Error in {elapsed:.2f}s - {str(e)}")
+        _search_status['talabat'] = 'complete'
         return {'products': [{'name': f'Error: {str(e)}', 'price': 'N/A'}]}
 
 
@@ -325,12 +345,21 @@ def status():
     """Return browser preload status"""
     return jsonify(_preload_status)
 
+@app.route('/search-status')
+def search_status():
+    """Return active search status"""
+    return jsonify(_search_status)
+
 @app.route('/search', methods=['POST'])
 def search():
+    global _search_status
     item = request.json.get('item', '')
     
     if not item:
         return jsonify({'error': 'Please enter an item to search'}), 400
+    
+    # Reset search status
+    _search_status = {'carrefour': 'ready', 'noon': 'ready', 'talabat': 'ready'}
     
     # Search all stores in parallel for better performance
     with ThreadPoolExecutor(max_workers=3) as executor:

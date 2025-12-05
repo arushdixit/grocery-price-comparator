@@ -301,6 +301,39 @@
         // Start polling on page load
         window.addEventListener('DOMContentLoaded', checkPreloadStatus);
         
+        let searchStatusInterval = null;
+        
+        function updateSearchStatusUI(status) {
+            Object.keys(status).forEach(store => {
+                const statusElem = document.getElementById(`status-${store}`);
+                if (!statusElem) return;
+                
+                const state = status[store];
+                statusElem.className = 'store-status';
+                
+                if (state === 'searching') {
+                    statusElem.className += ' status-loading';
+                    statusElem.innerHTML = `<div class="spinner"></div><span>${store.charAt(0).toUpperCase() + store.slice(1)}: Searching...</span>`;
+                } else if (state === 'complete') {
+                    statusElem.className += ' status-ready';
+                    statusElem.innerHTML = `<span>✓ ${store.charAt(0).toUpperCase() + store.slice(1)}: Complete</span>`;
+                } else if (state === 'ready') {
+                    statusElem.className += ' status-ready';
+                    statusElem.innerHTML = `<span>✓ ${store.charAt(0).toUpperCase() + store.slice(1)}: Ready</span>`;
+                }
+            });
+        }
+        
+        async function pollSearchStatus() {
+            try {
+                const response = await fetch('/search-status');
+                const status = await response.json();
+                updateSearchStatusUI(status);
+            } catch (error) {
+                console.error('Error polling search status:', error);
+            }
+        }
+        
         async function searchGrocery() {
             const input = document.getElementById('searchInput');
             const searchBtn = document.getElementById('searchBtn');
@@ -311,7 +344,7 @@
             const item = input.value.trim();
             
             if (!item) {
-                errorDiv.innerHTML = '<div class="error">Please enter a grocery item to search</div>';
+                errorDiv.innerHTML = '<div class="error">Please enter an item to search</div>';
                 return;
             }
             
@@ -320,6 +353,9 @@
             results.innerHTML = '';
             loading.style.display = 'block';
             searchBtn.disabled = true;
+            
+            // Start polling search status
+            searchStatusInterval = setInterval(pollSearchStatus, 300);
             
             try {
                 const response = await fetch('/search', {
@@ -342,6 +378,13 @@
             } finally {
                 loading.style.display = 'none';
                 searchBtn.disabled = false;
+                
+                // Stop polling and do final status check
+                if (searchStatusInterval) {
+                    clearInterval(searchStatusInterval);
+                    searchStatusInterval = null;
+                }
+                await pollSearchStatus();
             }
         }
         

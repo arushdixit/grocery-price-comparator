@@ -2,6 +2,8 @@ from flask import Flask, render_template, request, jsonify
 import requests
 from bs4 import BeautifulSoup
 import time
+import os
+import json
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
@@ -9,6 +11,9 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 app = Flask(__name__)
+
+# Noon cookies - load from Cookies/noon_minutes.json
+NOON_COOKIES_FILE = 'Cookies/noon_minutes.json'
 
 def search_carrefour(item):
     """Search Carrefour UAE for item prices"""
@@ -67,6 +72,49 @@ def search_noon(item):
         
         # Initialize driver
         driver = webdriver.Chrome(options=chrome_options)
+        
+        # Navigate to Noon first (required to set cookies)
+        driver.get("https://minutes.noon.com/uae-en/")
+        
+        # Add cookies if provided
+        try:
+            if os.path.exists(NOON_COOKIES_FILE):
+                with open(NOON_COOKIES_FILE, 'r') as f:
+                    cookies = json.load(f)
+                    cookie_count = 0
+                    for cookie in cookies:
+                        # Selenium requires specific cookie format
+                        selenium_cookie = {
+                            'name': cookie['name'],
+                            'value': cookie['value'],
+                            'domain': cookie['domain'],
+                            'path': cookie.get('path', '/'),
+                            'secure': cookie.get('secure', False)
+                        }
+                        # Add expiry if present
+                        if 'expirationDate' in cookie:
+                            selenium_cookie['expiry'] = int(cookie['expirationDate'])
+                        
+                        driver.add_cookie(selenium_cookie)
+                        cookie_count += 1
+                    print(f"[Noon] Added {cookie_count} cookies")
+                    # Reload to apply cookies
+                    driver.refresh()
+            else:
+                print(f"[Noon] No cookies file found at {NOON_COOKIES_FILE}")
+        except Exception as e:
+            print(f"[Noon] Error loading cookies: {str(e)}")
+        
+        # Wait for homepage to load and detect location
+        time.sleep(2)
+        try:
+            location_elem = driver.find_element(By.CSS_SELECTOR, "span.AddressHeader_addressText__kMyss")
+            location_text = location_elem.text.strip()
+            print(f"[Noon] Detected location: {location_text}")
+        except:
+            print("[Noon] ⚠️  Could not detect location - results may be for default area")
+        
+        # Navigate to search URL
         url = f"https://minutes.noon.com/uae-en/search/?q={item.replace(' ', '%20')}"
         driver.get(url)
         

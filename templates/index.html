@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dubai Grocery Price Comparator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            padding: 40px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+        
+        .search-box {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 40px;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        
+        #searchInput {
+            flex: 1;
+            padding: 15px 20px;
+            font-size: 16px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+        
+        #searchInput:focus {
+            border-color: #667eea;
+        }
+        
+        #searchBtn {
+            padding: 15px 40px;
+            font-size: 16px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.3s;
+        }
+        
+        #searchBtn:hover {
+            background: #5568d3;
+        }
+        
+        #searchBtn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #667eea;
+            font-size: 1.2em;
+            display: none;
+        }
+        
+        .results {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+        
+        .store-card {
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            padding: 20px;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        
+        .store-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+        }
+        
+        .store-header {
+            font-size: 1.5em;
+            font-weight: bold;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+        
+        .carrefour { border-left: 4px solid #0066cc; }
+        .noon { border-left: 4px solid #ffcc00; }
+        .talabat { border-left: 4px solid #ff6600; }
+        .kareem { border-left: 4px solid #00c851; }
+        
+        .product {
+            padding: 12px;
+            margin: 8px 0;
+            background: #f8f9fa;
+            border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .product-name {
+            flex: 1;
+            font-size: 0.9em;
+            color: #333;
+        }
+        
+        .product-price {
+            font-weight: bold;
+            color: #667eea;
+            font-size: 1.1em;
+            white-space: nowrap;
+        }
+        
+        .error {
+            color: #dc3545;
+            text-align: center;
+            padding: 20px;
+            background: #f8d7da;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        
+        .no-results {
+            text-align: center;
+            color: #666;
+            padding: 40px;
+            font-size: 1.1em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🛒 Dubai Grocery Price Comparator</h1>
+        <p class="subtitle">Compare prices across Carrefour, Noon, Talabat & Careem</p>
+        
+        <div class="search-box">
+            <input 
+                type="text" 
+                id="searchInput" 
+                placeholder="Enter grocery item (e.g., milk, rice, apples)..."
+                onkeypress="if(event.key==='Enter') searchGrocery()"
+            >
+            <button id="searchBtn" onclick="searchGrocery()">Search</button>
+        </div>
+        
+        <div class="loading" id="loading">
+            🔍 Searching stores...
+        </div>
+        
+        <div id="error"></div>
+        <div class="results" id="results"></div>
+    </div>
+
+    <script>
+        async function searchGrocery() {
+            const input = document.getElementById('searchInput');
+            const searchBtn = document.getElementById('searchBtn');
+            const loading = document.getElementById('loading');
+            const results = document.getElementById('results');
+            const errorDiv = document.getElementById('error');
+            
+            const item = input.value.trim();
+            
+            if (!item) {
+                errorDiv.innerHTML = '<div class="error">Please enter a grocery item to search</div>';
+                return;
+            }
+            
+            // Reset UI
+            errorDiv.innerHTML = '';
+            results.innerHTML = '';
+            loading.style.display = 'block';
+            searchBtn.disabled = true;
+            
+            try {
+                const response = await fetch('/search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ item })
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Search failed');
+                }
+                
+                const data = await response.json();
+                displayResults(data);
+                
+            } catch (error) {
+                errorDiv.innerHTML = '<div class="error">Error: ' + error.message + '</div>';
+            } finally {
+                loading.style.display = 'none';
+                searchBtn.disabled = false;
+            }
+        }
+        
+        function displayResults(data) {
+            const results = document.getElementById('results');
+            const stores = [
+                { name: 'Carrefour', key: 'carrefour', class: 'carrefour' },
+                { name: 'Noon', key: 'noon', class: 'noon' },
+                { name: 'Talabat', key: 'talabat', class: 'talabat' },
+                { name: 'Careem', key: 'kareem', class: 'kareem' }
+            ];
+            
+            stores.forEach(store => {
+                const storeData = data[store.key] || [];
+                const card = document.createElement('div');
+                card.className = `store-card ${store.class}`;
+                
+                let productsHTML = '';
+                if (storeData.length === 0) {
+                    productsHTML = '<div class="no-results">No results found</div>';
+                } else {
+                    storeData.forEach(product => {
+                        productsHTML += `
+                            <div class="product">
+                                <div class="product-name">${product.name}</div>
+                                <div class="product-price">${product.price}</div>
+                            </div>
+                        `;
+                    });
+                }
+                
+                card.innerHTML = `
+                    <div class="store-header">${store.name}</div>
+                    ${productsHTML}
+                `;
+                
+                results.appendChild(card);
+            });
+        }
+    </script>
+</body>
+</html>

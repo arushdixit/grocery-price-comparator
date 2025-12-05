@@ -120,6 +120,16 @@
             border-bottom: 2px solid #f0f0f0;
         }
         
+        .store-location {
+            font-size: 0.75em;
+            color: #666;
+            font-weight: normal;
+            margin-top: 4px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
         .carrefour { border-left: 4px solid #0066cc; }
         .noon { border-left: 4px solid #ffcc00; }
         .talabat { border-left: 4px solid #ff6600; }
@@ -242,15 +252,23 @@
             ];
             
             stores.forEach(store => {
-                const storeData = data[store.key] || [];
+                const storeData = data[store.key] || {};
+                const products = storeData.products || storeData || [];
+                const location = storeData.location;
+                
                 const card = document.createElement('div');
                 card.className = `store-card ${store.class}`;
                 
+                let locationHTML = '';
+                if (location) {
+                    locationHTML = `<div class="store-location">📍 ${location}</div>`;
+                }
+                
                 let productsHTML = '';
-                if (storeData.length === 0) {
+                if (products.length === 0) {
                     productsHTML = '<div class="no-results">No results found</div>';
                 } else {
-                    storeData.forEach(product => {
+                    products.forEach(product => {
                         productsHTML += `
                             <div class="product">
                                 <div class="product-name">${product.name}</div>
@@ -261,7 +279,10 @@
                 }
                 
                 card.innerHTML = `
-                    <div class="store-header">${store.name}</div>
+                    <div class="store-header">
+                        ${store.name}
+                        ${locationHTML}
+                    </div>
                     ${productsHTML}
                 `;
                 

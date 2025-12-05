@@ -4,6 +4,8 @@ from bs4 import BeautifulSoup
 import time
 import os
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
@@ -16,33 +18,49 @@ app = Flask(__name__)
 NOON_COOKIES_FILE = 'Cookies/noon_minutes.json'
 CARREFOUR_COOKIES_FILE = 'Cookies/carrefour.json'
 
-def search_carrefour(item):
-    """Search Carrefour UAE for item prices using Selenium"""
-    start_time = time.time()
-    print(f"[Carrefour] Starting search for '{item}'...")
-    driver = None
-    try:
-        # Setup Chrome options
-        chrome_options = Options()
-        chrome_options.add_argument('--headless')
-        chrome_options.add_argument('--no-sandbox')
-        chrome_options.add_argument('--disable-dev-shm-usage')
-        chrome_options.add_argument('--disable-blink-features=AutomationControlled')
-        chrome_options.add_argument('user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
-        
-        # Initialize driver
-        driver = webdriver.Chrome(options=chrome_options)
-        
-        # Navigate to Carrefour first (required to set cookies)
-        driver.get("https://www.carrefouruae.com/mafuae/en/")
-        
-        # Add cookies if provided
+# Persistent browser pool
+_browser_pool = {
+    'carrefour': None,
+    'noon': None
+}
+
+def get_chrome_driver():
+    """Create a new Chrome driver with standard options"""
+    chrome_options = Options()
+    chrome_options.add_argument('--headless')
+    chrome_options.add_argument('--no-sandbox')
+    chrome_options.add_argument('--disable-dev-shm-usage')
+    chrome_options.add_argument('--disable-blink-features=AutomationControlled')
+    chrome_options.add_argument('user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+    return webdriver.Chrome(options=chrome_options)
+
+def get_or_create_browser(store_name, base_url, cookies_file=None):
+    """Get existing browser or create new one with cookies loaded"""
+    global _browser_pool
+    
+    # Return existing browser if available
+    if _browser_pool.get(store_name) is not None:
         try:
-            if os.path.exists(CARREFOUR_COOKIES_FILE):
-                with open(CARREFOUR_COOKIES_FILE, 'r') as f:
-                    cookies = json.load(f)
-                    cookie_count = 0
-                    for cookie in cookies:
+            # Test if browser is still alive
+            _browser_pool[store_name].current_url
+            return _browser_pool[store_name], False  # False = not newly created
+        except:
+            # Browser died, clean up
+            _browser_pool[store_name] = None
+    
+    # Create new browser
+    print(f"[{store_name}] Initializing new browser session...")
+    driver = get_chrome_driver()
+    driver.get(base_url)
+    
+    # Load cookies if provided
+    if cookies_file and os.path.exists(cookies_file):
+        try:
+            with open(cookies_file, 'r') as f:
+                cookies = json.load(f)
+                cookie_count = 0
+                for cookie in cookies:
+                    try:
                         selenium_cookie = {
                             'name': cookie['name'],
                             'value': cookie['value'],
@@ -52,36 +70,47 @@ def search_carrefour(item):
                         }
                         if 'expirationDate' in cookie:
                             selenium_cookie['expiry'] = int(cookie['expirationDate'])
-                        
                         driver.add_cookie(selenium_cookie)
                         cookie_count += 1
-                    print(f"[Carrefour] Added {cookie_count} cookies")
-                    driver.refresh()
-            else:
-                print(f"[Carrefour] No cookies file found")
+                    except:
+                        continue
+                print(f"[{store_name}] Added {cookie_count} cookies")
         except Exception as e:
-            print(f"[Carrefour] Error loading cookies: {str(e)}")
+            print(f"[{store_name}] Error loading cookies: {str(e)}")
+    
+    _browser_pool[store_name] = driver
+    return driver, True  # True = newly created
+
+def search_carrefour(item):
+    """Search Carrefour UAE for item prices using Selenium"""
+    start_time = time.time()
+    print(f"[Carrefour] Starting search for '{item}'...")
+    location = None
+    try:
+        # Get or create persistent browser
+        driver, is_new = get_or_create_browser('Carrefour', 'https://www.carrefouruae.com/mafuae/en/', CARREFOUR_COOKIES_FILE)
         
-        # Detect location on homepage
-        time.sleep(2)
-        try:
-            location_elem = driver.find_element(By.CSS_SELECTOR, "div.max-w-\[250px\].truncate, div.max-w-\[220px\].truncate")
-            location_text = location_elem.text.strip()
-            if location_text:
-                print(f"[Carrefour] Detected location: {location_text}")
-            else:
-                print("[Carrefour] ⚠️  Could not detect location")
-        except:
-            print("[Carrefour] ⚠️  Could not detect location - results may be for default area")
+        # Detect location only on first load
+        if is_new:
+            time.sleep(1)
+            try:
+                location_elem = driver.find_element(By.CSS_SELECTOR, "div.max-w-\\[250px\\].truncate, div.max-w-\\[220px\\].truncate")
+                location = location_elem.text.strip()
+                if location:
+                    print(f"[Carrefour] Detected location: {location}")
+                else:
+                    print("[Carrefour] ⚠️  Could not detect location")
+            except:
+                print("[Carrefour] ⚠️  Could not detect location - results may be for default area")
         
         # Navigate to search URL
         url = f"https://www.carrefouruae.com/mafuae/en/search?keyword={item.replace(' ', '%20')}"
         driver.get(url)
         
         # Wait for products to load
-        wait = WebDriverWait(driver, 15)
+        wait = WebDriverWait(driver, 10)
         wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "div[class*='max-w-']")))
-        time.sleep(2)
+        time.sleep(1)
         
         # Parse with BeautifulSoup
         soup = BeautifulSoup(driver.page_source, 'html.parser')
@@ -90,7 +119,7 @@ def search_carrefour(item):
         # Find product containers
         product_containers = soup.find_all('div', class_=lambda x: x and 'max-w-' in str(x) and 'sm:max-w-' in str(x))
         
-        for container in product_containers[:10]:
+        for container in product_containers[:20]:
             try:
                 # Find the link with product name (skip labels like "Bestseller")
                 link = container.find('a', href=True)
@@ -140,84 +169,45 @@ def search_carrefour(item):
         
         elapsed = time.time() - start_time
         print(f"[Carrefour] Completed in {elapsed:.2f}s - Found {len(products)} products")
-        return products if products else [{'name': 'No results found', 'price': 'N/A'}]
+        result = {'products': products if products else [{'name': 'No results found', 'price': 'N/A'}]}
+        if location:
+            result['location'] = location
+        return result
         
     except Exception as e:
         elapsed = time.time() - start_time
         print(f"[Carrefour] Error in {elapsed:.2f}s - {str(e)}")
-        return [{'name': f'Error: {str(e)}', 'price': 'N/A'}]
-    finally:
-        if driver:
-            driver.quit()
+        return {'products': [{'name': f'Error: {str(e)}', 'price': 'N/A'}]}
 
 def search_noon(item):
     """Search Noon for item prices using Selenium"""
     start_time = time.time()
     print(f"[Noon] Starting search for '{item}'...")
-    driver = None
+    location = None
     try:
-        # Setup Chrome options
-        chrome_options = Options()
-        chrome_options.add_argument('--headless')  # Run in background
-        chrome_options.add_argument('--no-sandbox')
-        chrome_options.add_argument('--disable-dev-shm-usage')
-        chrome_options.add_argument('--disable-blink-features=AutomationControlled')
-        chrome_options.add_argument('user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+        # Get or create persistent browser
+        driver, is_new = get_or_create_browser('Noon', 'https://minutes.noon.com/uae-en/', NOON_COOKIES_FILE)
         
-        # Initialize driver
-        driver = webdriver.Chrome(options=chrome_options)
-        
-        # Navigate to Noon first (required to set cookies)
-        driver.get("https://minutes.noon.com/uae-en/")
-        
-        # Add cookies if provided
-        try:
-            if os.path.exists(NOON_COOKIES_FILE):
-                with open(NOON_COOKIES_FILE, 'r') as f:
-                    cookies = json.load(f)
-                    cookie_count = 0
-                    for cookie in cookies:
-                        # Selenium requires specific cookie format
-                        selenium_cookie = {
-                            'name': cookie['name'],
-                            'value': cookie['value'],
-                            'domain': cookie['domain'],
-                            'path': cookie.get('path', '/'),
-                            'secure': cookie.get('secure', False)
-                        }
-                        # Add expiry if present
-                        if 'expirationDate' in cookie:
-                            selenium_cookie['expiry'] = int(cookie['expirationDate'])
-                        
-                        driver.add_cookie(selenium_cookie)
-                        cookie_count += 1
-                    print(f"[Noon] Added {cookie_count} cookies")
-                    # Reload to apply cookies
-                    driver.refresh()
-            else:
-                print(f"[Noon] No cookies file found at {NOON_COOKIES_FILE}")
-        except Exception as e:
-            print(f"[Noon] Error loading cookies: {str(e)}")
-        
-        # Wait for homepage to load and detect location
-        time.sleep(2)
-        try:
-            location_elem = driver.find_element(By.CSS_SELECTOR, "span.AddressHeader_addressText__kMyss")
-            location_text = location_elem.text.strip()
-            print(f"[Noon] Detected location: {location_text}")
-        except:
-            print("[Noon] ⚠️  Could not detect location - results may be for default area")
+        # Detect location only on first load
+        if is_new:
+            time.sleep(1)
+            try:
+                location_elem = driver.find_element(By.CSS_SELECTOR, "span.AddressHeader_addressText__kMyss")
+                location = location_elem.text.strip()
+                print(f"[Noon] Detected location: {location}")
+            except:
+                print("[Noon] ⚠️  Could not detect location - results may be for default area")
         
         # Navigate to search URL
         url = f"https://minutes.noon.com/uae-en/search/?q={item.replace(' ', '%20')}"
         driver.get(url)
         
         # Wait for products to load (wait for product boxes)
-        wait = WebDriverWait(driver, 15)
+        wait = WebDriverWait(driver, 10)
         wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "div[class*='ProductBox_detailsSection']")))
         
         # Additional wait for dynamic content
-        time.sleep(2)
+        time.sleep(1)
         
         # Parse with BeautifulSoup
         soup = BeautifulSoup(driver.page_source, 'html.parser')
@@ -226,7 +216,7 @@ def search_noon(item):
         # Find product boxes
         product_boxes = soup.find_all('div', class_=lambda x: x and 'ProductBox_detailsSection' in x)
         
-        for product in product_boxes[:10]:  # Limit to 10 results
+        for product in product_boxes[:20]:  # Limit to 20 results
             try:
                 name_elem = product.find('h2', class_=lambda x: x and 'ProductBox_title' in x)
                 price_elem = product.find('strong', class_=lambda x: x and 'Price_productPrice' in x)
@@ -254,15 +244,15 @@ def search_noon(item):
         
         elapsed = time.time() - start_time
         print(f"[Noon] Completed in {elapsed:.2f}s - Found {len(products)} products")
-        return products if products else [{'name': 'No results found', 'price': 'N/A'}]
+        result = {'products': products if products else [{'name': 'No results found', 'price': 'N/A'}]}
+        if location:
+            result['location'] = location
+        return result
         
     except Exception as e:
         elapsed = time.time() - start_time
         print(f"[Noon] Error in {elapsed:.2f}s - {str(e)}")
-        return [{'name': f'Error: {str(e)}', 'price': 'N/A'}]
-    finally:
-        if driver:
-            driver.quit()
+        return {'products': [{'name': f'Error: {str(e)}', 'price': 'N/A'}]}
 
 def search_talabat(item):
     """Search Talabat for item prices"""
@@ -280,14 +270,15 @@ def search_talabat(item):
             # Note: Talabat is heavily JavaScript-based, this is a placeholder
             elapsed = time.time() - start_time
             print(f"[Talabat] Completed in {elapsed:.2f}s - Placeholder response")
-            return [{'name': 'Talabat requires JavaScript (manual search)', 'price': 'N/A'}]
-        elapsed = time.time() - start_time
-        print(f"[Talabat] Failed in {elapsed:.2f}s")
-        return [{'name': 'Error fetching data', 'price': 'N/A'}]
+            return {'products': [{'name': 'Talabat requires JavaScript (manual search)', 'price': 'N/A'}]}
+        else:
+            elapsed = time.time() - start_time
+            print(f"[Talabat] Failed in {elapsed:.2f}s with status code {response.status_code}")
+            return {'products': [{'name': 'Error fetching data', 'price': 'N/A'}]}
     except Exception as e:
         elapsed = time.time() - start_time
         print(f"[Talabat] Error in {elapsed:.2f}s - {str(e)}")
-        return [{'name': f'Error: {str(e)}', 'price': 'N/A'}]
+        return {'products': [{'name': f'Error: {str(e)}', 'price': 'N/A'}]}
 
 
 @app.route('/')
@@ -301,14 +292,35 @@ def search():
     if not item:
         return jsonify({'error': 'Please enter an item to search'}), 400
     
-    # Search all stores
-    results = {
-        'carrefour': search_carrefour(item),
-        'noon': search_noon(item),
-        'talabat': search_talabat(item)
-    }
+    # Search all stores in parallel for better performance
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        carrefour_future = executor.submit(search_carrefour, item)
+        noon_future = executor.submit(search_noon, item)
+        talabat_future = executor.submit(search_talabat, item)
+        
+        results = {
+            'carrefour': carrefour_future.result(),
+            'noon': noon_future.result(),
+            'talabat': talabat_future.result()
+        }
     
     return jsonify(results)
+
+def preload_browsers():
+    """Preload browsers on startup for faster first query"""
+    print("[Startup] Preloading browsers...")
+    try:
+        # Preload Carrefour
+        get_or_create_browser('Carrefour', 'https://www.carrefouruae.com/mafuae/en/', CARREFOUR_COOKIES_FILE)
+        print("[Startup] Carrefour browser ready")
+        
+        # Preload Noon
+        get_or_create_browser('Noon', 'https://minutes.noon.com/uae-en/', NOON_COOKIES_FILE)
+        print("[Startup] Noon browser ready")
+        
+        print("[Startup] All browsers preloaded successfully")
+    except Exception as e:
+        print(f"[Startup] Error preloading browsers: {str(e)}")
 
 if __name__ == '__main__':
     app.run(debug=True, host='127.0.0.1', port=5000)

@@ -41,7 +41,7 @@ def search_carrefour(item):
 def search_noon(item):
     """Search Noon for item prices"""
     try:
-        url = f"https://www.noon.com/uae-en/search/?q={item.replace(' ', '+')}"
+        url = f"https://minutes.noon.com/uae-en/search/?q={item.replace(' ', '+')}"
         headers = {
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
         }
@@ -50,17 +50,32 @@ def search_noon(item):
         if response.status_code == 200:
             soup = BeautifulSoup(response.content, 'html.parser')
             products = []
-            # Simplified scraper - actual structure may vary
-            product_cards = soup.find_all('div', class_='productContainer', limit=5)
             
-            for card in product_cards:
+            # Updated selectors based on current HTML structure
+            product_boxes = soup.find_all('div', class_='ProductBox_detailsSection__gmA8X', limit=10)
+            
+            for product in product_boxes:
                 try:
-                    name = card.find('div', class_='sc-')
-                    price = card.find('span', class_='price')
-                    if name and price:
+                    name_elem = product.find('h2', class_='ProductBox_title__iAAqO')
+                    price_elem = product.find('strong', class_='Price_productPrice__uWVE7')
+                    size_elem = product.find('span', class_='ProductBox_sizeInfo__7KdJ4')
+                    origin_elem = product.find('span', class_='TaggedAttributes_attribute__gJjSA')
+                    
+                    if name_elem and price_elem:
+                        name = name_elem.text.strip()
+                        
+                        # Add size info if available
+                        if size_elem:
+                            name += f" - {size_elem.text.strip()}"
+                        
+                        # Add origin info if available
+                        if origin_elem:
+                            origin = origin_elem.text.strip()
+                            name += f" ({origin})"
+                        
                         products.append({
-                            'name': name.text.strip(),
-                            'price': price.text.strip()
+                            'name': name,
+                            'price': f"AED {price_elem.text.strip()}"
                         })
                 except:
                     continue

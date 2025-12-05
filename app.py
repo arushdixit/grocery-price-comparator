@@ -262,22 +262,50 @@ def search_noon(item):
         return {'products': [{'name': f'Error: {str(e)}', 'price': 'N/A'}]}
 
 def search_talabat(item):
-    """Search Talabat for item prices"""
+    """Search Talabat for item prices via API"""
     start_time = time.time()
     print(f"[Talabat] Starting search for '{item}'...")
     try:
-        # Talabat Mart search
-        url = f"https://www.talabat.com/uae/mart/search?query={item.replace(' ', '+')}"
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+        # Talabat Mart API endpoint
+        # Store ID: c249bcfd-9962-4a51-adf0-ff8dabc185fa (The Palm Jumeirah)
+        url = f"https://www.talabat.com/nextApi/groceries/stores/c249bcfd-9962-4a51-adf0-ff8dabc185fa/products"
+        params = {
+            'countryId': '4',  # UAE
+            'query': item,
+            'limit': '20',
+            'offset': '0',
+            'isDarkstore': 'true',
+            'isMigrated': 'false',
+            'lang': 'en'  # Force English results
         }
-        response = requests.get(url, headers=headers, timeout=10)
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'application/json',
+            'Accept-Language': 'en-US,en;q=0.9'
+        }
+        response = requests.get(url, params=params, headers=headers, timeout=10)
         
         if response.status_code == 200:
-            # Note: Talabat is heavily JavaScript-based, this is a placeholder
+            data = response.json()
+            items = data.get('items', [])
+            products = []
+            
+            for product in items[:20]:
+                try:
+                    title = product.get('title', '')
+                    price = product.get('price')
+                    
+                    if title and price is not None:
+                        products.append({
+                            'name': title,
+                            'price': f"AED {price}"
+                        })
+                except:
+                    continue
+            
             elapsed = time.time() - start_time
-            print(f"[Talabat] Completed in {elapsed:.2f}s - Placeholder response")
-            return {'products': [{'name': 'Talabat requires JavaScript (manual search)', 'price': 'N/A'}]}
+            print(f"[Talabat] Completed in {elapsed:.2f}s - Found {len(products)} products")
+            return {'products': products if products else [{'name': 'No results found', 'price': 'N/A'}]}
         else:
             elapsed = time.time() - start_time
             print(f"[Talabat] Failed in {elapsed:.2f}s with status code {response.status_code}")

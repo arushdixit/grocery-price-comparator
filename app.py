@@ -11,6 +11,14 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from dotenv import load_dotenv
+
+# Import our custom modules
+from utils import match_products_with_ai, sort_products, parse_price
+from database import save_product_and_prices, log_search, get_product_analytics, get_search_trends, get_price_history
+
+# Load environment variables
+load_dotenv()
 
 app = Flask(__name__)
 
@@ -340,6 +348,48 @@ def search_talabat(item):
 def index():
     return render_template('index.html')
 
+@app.route('/analytics')
+def analytics():
+    """Analytics dashboard page"""
+    return render_template('analytics.html')
+
+@app.route('/api/analytics/products')
+def analytics_products():
+    """Get product analytics data"""
+    limit = request.args.get('limit', 100, type=int)
+    try:
+        products = get_product_analytics(limit=limit)
+        return jsonify({
+            'products': [dict(row) for row in products]
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/analytics/trends')
+def analytics_trends():
+    """Get search trends"""
+    days = request.args.get('days', 7, type=int)
+    limit = request.args.get('limit', 20, type=int)
+    try:
+        trends = get_search_trends(days=days, limit=limit)
+        return jsonify({
+            'trends': [dict(row) for row in trends]
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/analytics/price-history/<int:product_id>')
+def analytics_price_history(product_id):
+    """Get price history for a specific product"""
+    days = request.args.get('days', 30, type=int)
+    try:
+        history = get_price_history(product_id, days=days)
+        return jsonify({
+            'history': [dict(row) for row in history]
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/status')
 def status():
     """Return browser preload status"""
@@ -367,13 +417,58 @@ def search():
         noon_future = executor.submit(search_noon, item)
         talabat_future = executor.submit(search_talabat, item)
         
-        results = {
+        raw_results = {
             'carrefour': carrefour_future.result(),
             'noon': noon_future.result(),
             'talabat': talabat_future.result()
         }
     
-    return jsonify(results)
+    # Return raw results only
+    return jsonify({
+        'raw_results': raw_results,
+        'locations': {
+            'carrefour': raw_results.get('carrefour', {}).get('location'),
+            'noon': raw_results.get('noon', {}).get('location'),
+        }
+    })
+
+@app.route('/match', methods=['POST'])
+def match():
+    """Match products from raw results"""
+    data = request.json
+    raw_results = data.get('raw_results', {})
+    sort_by = data.get('sort_by', 'price')  # 'price' or 'quantity'
+    sort_order = data.get('sort_order', 'asc')  # 'asc' or 'desc'
+    
+    if not raw_results:
+        return jsonify({'error': 'No raw results provided'}), 400
+    
+    # Get OpenRouter API key from environment
+    openrouter_api_key = os.getenv('OPENROUTER_API_KEY')
+    
+    # Match products across stores using AI
+    matched_products = match_products_with_ai(raw_results, openrouter_api_key)
+    
+    # Sort products
+    ascending = (sort_order == 'asc')
+    sorted_products = sort_products(matched_products, sort_by=sort_by, ascending=ascending)
+    
+    # Save to database in background (P1 feature)
+    try:
+        if sorted_products:
+            # Background task to avoid blocking response
+            threading.Thread(
+                target=save_product_and_prices, 
+                args=(sorted_products,), 
+                daemon=True
+            ).start()
+            # Don't log search here, already logged during initial search
+    except Exception as e:
+        print(f"[Database] Error saving to database: {str(e)}")
+    
+    return jsonify({
+        'matched_products': sorted_products
+    })
 
 def preload_single_browser(store_name, base_url, cookies_file):
     """Preload a single browser"""

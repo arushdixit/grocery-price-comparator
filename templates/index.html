@@ -10,133 +10,410 @@
             padding: 0;
             box-sizing: border-box;
         }
-        
+
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             padding: 20px;
         }
-        
+
         .container {
             max-width: 1200px;
             margin: 0 auto;
             background: white;
             border-radius: 15px;
-            padding: 40px;
+            padding: 30px 30px 40px;
             box-shadow: 0 10px 40px rgba(0,0,0,0.2);
         }
-        
+
         h1 {
             text-align: center;
             color: #333;
-            margin-bottom: 10px;
-            font-size: 2.5em;
+            margin-bottom: 8px;
+            font-size: 2.4em;
         }
-        
+
         .subtitle {
             text-align: center;
             color: #666;
-            margin-bottom: 30px;
-            font-size: 1.1em;
+            margin-bottom: 24px;
+            font-size: 1.05em;
         }
-        
+
+        .header-row {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
         .search-box {
             display: flex;
             gap: 10px;
-            margin-bottom: 40px;
-            max-width: 600px;
-            margin-left: auto;
-            margin-right: auto;
+            flex: 1 1 260px;
         }
-        
+
         #searchInput {
             flex: 1;
-            padding: 15px 20px;
-            font-size: 16px;
+            padding: 10px 14px;
+            font-size: 15px;
             border: 2px solid #ddd;
             border-radius: 10px;
             outline: none;
-            transition: border-color 0.3s;
+            transition: border-color 0.2s;
         }
-        
+
         #searchInput:focus {
             border-color: #667eea;
         }
-        
+
         #searchBtn {
-            padding: 15px 40px;
-            font-size: 16px;
+            padding: 10px 20px;
+            font-size: 15px;
             background: #667eea;
             color: white;
             border: none;
             border-radius: 10px;
             cursor: pointer;
-            font-weight: bold;
-            transition: background 0.3s;
+            font-weight: 600;
+            white-space: nowrap;
+            transition: background 0.2s, transform 0.1s;
         }
-        
+
         #searchBtn:hover {
             background: #5568d3;
         }
-        
+
+        #searchBtn:active {
+            transform: translateY(1px);
+        }
+
         #searchBtn:disabled {
             background: #ccc;
             cursor: not-allowed;
         }
-        
+
+        #matchBtn {
+            padding: 10px 20px;
+            font-size: 15px;
+            background: #48bb78;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 600;
+            white-space: nowrap;
+            transition: background 0.2s, transform 0.1s;
+            display: none;
+            margin: 16px auto 0;
+        }
+
+        #matchBtn:hover {
+            background: #38a169;
+        }
+
+        #matchBtn:active {
+            transform: translateY(1px);
+        }
+
+        #matchBtn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .sort-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 16px;
+            align-items: center;
+            font-size: 0.9em;
+        }
+
+        .sort-controls label {
+            color: #555;
+            margin-right: 4px;
+        }
+
+        .sort-controls select {
+            padding: 6px 10px;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            font-size: 0.9em;
+            background: #fafafa;
+        }
+
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 0.8em;
+            background: #eef2ff;
+            color: #434190;
+        }
+
+        .pill-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #48bb78;
+        }
+
+        .preload-status {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin: 10px 0 18px;
+            padding: 10px 14px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+
+        .store-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px;
+            border-radius: 999px;
+            font-size: 0.85em;
+            font-weight: 500;
+        }
+
+        .status-loading { background: #fff3cd; color: #856404; }
+        .status-ready   { background: #d4edda; color: #155724; }
+        .status-error   { background: #f8d7da; color: #721c24; }
+
+        .spinner {
+            width: 14px;
+            height: 14px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
         .loading {
             text-align: center;
-            padding: 40px;
+            padding: 18px 0 8px;
             color: #667eea;
-            font-size: 1.2em;
+            font-size: 0.95em;
             display: none;
         }
-        
-        .results {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 20px;
-            margin-top: 30px;
+
+        .error {
+            color: #dc3545;
+            text-align: center;
+            padding: 10px 14px;
+            background: #f8d7da;
+            border-radius: 10px;
+            margin: 10px 0 6px;
+            font-size: 0.9em;
         }
-        
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            margin-top: 10px;
+            margin-bottom: 8px;
+        }
+
+        .section-title {
+            font-size: 1.1em;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .section-subtitle {
+            font-size: 0.85em;
+            color: #666;
+        }
+
+        .matched-section {
+            margin-top: 8px;
+        }
+
+        .matched-note {
+            font-size: 0.8em;
+            color: #777;
+            margin-bottom: 6px;
+        }
+
+        .comparison-table-wrapper {
+            width: 100%;
+            overflow-x: auto;
+            border-radius: 10px;
+            border: 1px solid #eee;
+        }
+
+        table.comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9em;
+            background: #fafbff;
+        }
+
+        table.comparison-table thead {
+            background: #eef2ff;
+        }
+
+        table.comparison-table th,
+        table.comparison-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #e4e7f5;
+            text-align: left;
+            vertical-align: middle;
+        }
+
+        table.comparison-table th {
+            font-weight: 600;
+            color: #444;
+            white-space: nowrap;
+        }
+
+        table.comparison-table tbody tr:nth-child(even) {
+            background: #fdfdff;
+        }
+
+        .product-name-cell {
+            font-weight: 500;
+            color: #1a202c;
+        }
+
+        .quantity-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 8px;
+            border-radius: 999px;
+            background: #ebf8ff;
+            color: #2b6cb0;
+            font-size: 0.78em;
+        }
+
+        .brand-text {
+            font-size: 0.85em;
+            color: #4a5568;
+        }
+
+        .price-cell {
+            white-space: nowrap;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .price-value {
+            font-weight: 600;
+            color: #2b6cb0;
+        }
+
+        .best-price {
+            background: #c6f6d5 !important;
+            color: #22543d !important;
+            border-radius: 6px;
+        }
+
+        .best-price-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 6px;
+            border-radius: 999px;
+            background: #22543d;
+            color: #f0fff4;
+            font-size: 0.7em;
+            margin-left: 6px;
+        }
+
+        .muted {
+            color: #a0aec0;
+            font-size: 0.8em;
+        }
+
+        .no-matches {
+            text-align: center;
+            padding: 18px 10px 10px;
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        .raw-section {
+            margin-top: 24px;
+        }
+
+        .raw-header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .toggle-raw-btn {
+            border: none;
+            background: transparent;
+            color: #4c51bf;
+            font-size: 0.8em;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 16px;
+            margin-top: 8px;
+        }
+
         .store-card {
             border: 2px solid #e0e0e0;
             border-radius: 12px;
-            padding: 20px;
-            transition: transform 0.3s, box-shadow 0.3s;
+            padding: 14px 14px 16px;
+            transition: transform 0.2s, box-shadow 0.2s;
+            background: #fff;
         }
-        
+
         .store-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 14px rgba(0,0,0,0.08);
         }
-        
+
         .store-header {
-            font-size: 1.5em;
-            font-weight: bold;
-            margin-bottom: 15px;
-            padding-bottom: 10px;
-            border-bottom: 2px solid #f0f0f0;
+            font-size: 1.05em;
+            font-weight: 600;
+            margin-bottom: 8px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #f0f0f0;
         }
-        
+
         .store-location {
             font-size: 0.75em;
             color: #666;
             font-weight: normal;
-            margin-top: 4px;
+            margin-top: 3px;
             display: flex;
             align-items: center;
             gap: 4px;
         }
-        
+
         .carrefour { border-left: 4px solid #0066cc; }
-        .noon { border-left: 4px solid #ffcc00; }
-        .talabat { border-left: 4px solid #ff6600; }
-        
-        .product {
-            padding: 12px;
-            margin: 8px 0;
+        .noon      { border-left: 4px solid #ffcc00; }
+        .talabat   { border-left: 4px solid #ff6600; }
+
+        .product-row {
+            padding: 10px 8px;
+            margin: 4px 0;
             background: #f8f9fa;
             border-radius: 8px;
             display: flex;
@@ -144,101 +421,76 @@
             align-items: center;
             gap: 10px;
         }
-        
-        .product-name {
+
+        .product-row-name {
             flex: 1;
-            font-size: 0.9em;
+            font-size: 0.85em;
             color: #333;
         }
-        
-        .product-price {
-            font-weight: bold;
+
+        .product-row-price {
+            font-weight: 600;
             color: #667eea;
-            font-size: 1.1em;
+            font-size: 0.95em;
             white-space: nowrap;
         }
-        
-        .error {
-            color: #dc3545;
-            text-align: center;
-            padding: 20px;
-            background: #f8d7da;
-            border-radius: 10px;
-            margin: 20px 0;
-        }
-        
+
         .no-results {
             text-align: center;
             color: #666;
-            padding: 40px;
-            font-size: 1.1em;
+            padding: 20px 6px 10px;
+            font-size: 0.85em;
         }
-        
-        .preload-status {
-            display: flex;
-            justify-content: center;
-            gap: 20px;
-            margin: 20px 0;
-            padding: 15px;
-            background: #f8f9fa;
-            border-radius: 10px;
-        }
-        
-        .store-status {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 8px 16px;
-            border-radius: 8px;
-            font-size: 0.9em;
-            font-weight: 500;
-        }
-        
-        .status-loading {
-            background: #fff3cd;
-            color: #856404;
-        }
-        
-        .status-ready {
-            background: #d4edda;
-            color: #155724;
-        }
-        
-        .status-error {
-            background: #f8d7da;
-            color: #721c24;
-        }
-        
-        .spinner {
-            width: 16px;
-            height: 16px;
-            border: 2px solid #f3f3f3;
-            border-top: 2px solid #667eea;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px 16px 26px;
+            }
+
+            h1 {
+                font-size: 1.8em;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🛒 Dubai Grocery Price Comparator</h1>
-        <p class="subtitle">Compare prices across Carrefour, Noon & Talabat</p>
-        
-        <div class="search-box">
-            <input 
-                type="text" 
-                id="searchInput" 
-                placeholder="Enter grocery item (e.g., milk, rice, apples)..."
-                onkeypress="if(event.key==='Enter') searchGrocery()"
-            >
-            <button id="searchBtn" onclick="searchGrocery()">Search</button>
+        <h1>Dubai Grocery Price Comparator</h1>
+        <p class="subtitle">Compare SKUs across Carrefour, Noon & Talabat by price and weight/volume</p>
+
+        <div class="header-row">
+            <div class="search-box">
+                <input
+                    type="text"
+                    id="searchInput"
+                    placeholder="Enter grocery item (e.g., bayara moong dal, milk, basmati rice)..."
+                    onkeypress="if(event.key==='Enter') searchGrocery()"
+                >
+                <button id="searchBtn" onclick="searchGrocery()">Search</button>
+            </div>
+
+            <div class="sort-controls">
+                <div>
+                    <label for="sortBy">Sort by</label>
+                    <select id="sortBy">
+                        <option value="price" selected>Lowest price (default)</option>
+                        <option value="quantity">Weight / volume</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="sortOrder">Order</label>
+                    <select id="sortOrder">
+                        <option value="asc" selected>Ascending</option>
+                        <option value="desc">Descending</option>
+                    </select>
+                </div>
+                <div class="pill">
+                    <span class="pill-dot"></span>
+                    AI-powered product matching
+                </div>
+            </div>
         </div>
-        
+
         <div class="preload-status" id="preloadStatus">
             <div class="store-status status-loading" id="status-carrefour">
                 <div class="spinner"></div>
@@ -249,34 +501,54 @@
                 <span>Noon: Loading...</span>
             </div>
             <div class="store-status status-ready" id="status-talabat">
-                <span>✓ Talabat: Ready</span>
+                <span>Talabat: Ready</span>
             </div>
         </div>
-        
-        <div class="loading" id="loading">
-            🔍 Searching stores...
-        </div>
-        
+
+        <div class="loading" id="loading">Searching stores...</div>
+        <div class="loading" id="matchingLoading" style="display: none;">Matching SKUs with AI...</div>
+
         <div id="error"></div>
-        <div class="results" id="results"></div>
+
+        <button id="matchBtn" onclick="matchProducts()">🤖 Match Products with AI</button>
+
+        <div class="raw-section">
+            <div class="section-header">
+                <div>
+                    <div class="section-title">Raw results by store</div>
+                    <div class="section-subtitle">Unprocessed search results from each store</div>
+                </div>
+            </div>
+            <div class="matched-note" id="locationNote"></div>
+            <div id="rawResults" class="results-grid"></div>
+        </div>
+
+        <div class="matched-section" id="matchedSection" style="display: none;">
+            <div class="section-header">
+                <div>
+                    <div class="section-title">Matched SKUs across stores</div>
+                    <div class="section-subtitle">Same brand & quantity grouped together for fair comparison</div>
+                </div>
+            </div>
+            <div id="matchedResults"></div>
+        </div>
     </div>
 
     <script>
-        // Poll preload status on page load
+        // ---------- Status polling ----------
         async function checkPreloadStatus() {
             try {
                 const response = await fetch('/status');
                 const status = await response.json();
-                
-                // Update UI for each store
+
                 Object.keys(status).forEach(store => {
                     const statusElem = document.getElementById(`status-${store}`);
                     if (!statusElem) return;
-                    
+
                     const state = status[store];
                     statusElem.className = 'store-status';
-                    
-                    if (state === 'loading') {
+
+                    if (state === 'loading' || state === 'not_started') {
                         statusElem.className += ' status-loading';
                         statusElem.innerHTML = `<div class="spinner"></div><span>${store.charAt(0).toUpperCase() + store.slice(1)}: Loading...</span>`;
                     } else if (state === 'ready') {
@@ -287,43 +559,38 @@
                         statusElem.innerHTML = `<span>✗ ${store.charAt(0).toUpperCase() + store.slice(1)}: Error</span>`;
                     }
                 });
-                
-                // Keep polling if any store is still loading
+
                 const stillLoading = Object.values(status).some(s => s === 'loading' || s === 'not_started');
                 if (stillLoading) {
-                    setTimeout(checkPreloadStatus, 500);
+                    setTimeout(checkPreloadStatus, 600);
                 }
             } catch (error) {
                 console.error('Error checking preload status:', error);
             }
         }
-        
-        // Start polling on page load
+
         window.addEventListener('DOMContentLoaded', checkPreloadStatus);
-        
+
         let searchStatusInterval = null;
-        
+
         function updateSearchStatusUI(status) {
             Object.keys(status).forEach(store => {
                 const statusElem = document.getElementById(`status-${store}`);
                 if (!statusElem) return;
-                
+
                 const state = status[store];
                 statusElem.className = 'store-status';
-                
+
                 if (state === 'searching') {
                     statusElem.className += ' status-loading';
                     statusElem.innerHTML = `<div class="spinner"></div><span>${store.charAt(0).toUpperCase() + store.slice(1)}: Searching...</span>`;
-                } else if (state === 'complete') {
-                    statusElem.className += ' status-ready';
-                    statusElem.innerHTML = `<span>✓ ${store.charAt(0).toUpperCase() + store.slice(1)}: Complete</span>`;
-                } else if (state === 'ready') {
+                } else if (state === 'complete' || state === 'ready') {
                     statusElem.className += ' status-ready';
                     statusElem.innerHTML = `<span>✓ ${store.charAt(0).toUpperCase() + store.slice(1)}: Ready</span>`;
                 }
             });
         }
-        
+
         async function pollSearchStatus() {
             try {
                 const response = await fetch('/search-status');
@@ -333,53 +600,73 @@
                 console.error('Error polling search status:', error);
             }
         }
-        
+
+        // Store raw results globally for matching
+        let currentRawResults = null;
+
+        // ---------- Search & display ----------
         async function searchGrocery() {
             const input = document.getElementById('searchInput');
             const searchBtn = document.getElementById('searchBtn');
             const loading = document.getElementById('loading');
-            const results = document.getElementById('results');
             const errorDiv = document.getElementById('error');
-            
+            const matchedSection = document.getElementById('matchedSection');
+            const matchedResults = document.getElementById('matchedResults');
+            const rawResults = document.getElementById('rawResults');
+            const matchBtn = document.getElementById('matchBtn');
+
             const item = input.value.trim();
-            
             if (!item) {
-                errorDiv.innerHTML = '<div class="error">Please enter an item to search</div>';
+                errorDiv.innerHTML = '<div class="error">Please enter an item to search.</div>';
                 return;
             }
-            
-            // Reset UI
+
             errorDiv.innerHTML = '';
-            results.innerHTML = '';
+            matchedResults.innerHTML = '';
+            rawResults.innerHTML = '';
+            matchedSection.style.display = 'none';
+            matchBtn.style.display = 'none';
             loading.style.display = 'block';
             searchBtn.disabled = true;
-            
-            // Start polling search status
-            searchStatusInterval = setInterval(pollSearchStatus, 300);
-            
+
+            searchStatusInterval = setInterval(pollSearchStatus, 400);
+
             try {
                 const response = await fetch('/search', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ item })
                 });
-                
+
                 if (!response.ok) {
-                    throw new Error('Search failed');
+                    const data = await response.json().catch(() => ({}));
+                    throw new Error(data.error || 'Search failed');
                 }
-                
+
                 const data = await response.json();
-                displayResults(data);
+                currentRawResults = data;
+                renderRawResults(data.raw_results || data);
                 
+                // Show location note
+                const locations = data.locations || {};
+                const locationNote = document.getElementById('locationNote');
+                const parts = [];
+                if (locations.carrefour) {
+                    parts.push(`Carrefour: ${locations.carrefour}`);
+                }
+                if (locations.noon) {
+                    parts.push(`Noon: ${locations.noon}`);
+                }
+                locationNote.textContent = parts.length ? `Search locations · ${parts.join(' · ')}` : '';
+                
+                // Show match button
+                matchBtn.style.display = 'block';
             } catch (error) {
-                errorDiv.innerHTML = '<div class="error">Error: ' + error.message + '</div>';
+                console.error(error);
+                errorDiv.innerHTML = '<div class="error">Error: ' + (error.message || 'Something went wrong') + '</div>';
             } finally {
                 loading.style.display = 'none';
                 searchBtn.disabled = false;
-                
-                // Stop polling and do final status check
                 if (searchStatusInterval) {
                     clearInterval(searchStatusInterval);
                     searchStatusInterval = null;
@@ -387,42 +674,172 @@
                 await pollSearchStatus();
             }
         }
-        
-        function displayResults(data) {
-            const results = document.getElementById('results');
+
+        async function matchProducts() {
+            const matchBtn = document.getElementById('matchBtn');
+            const matchingLoading = document.getElementById('matchingLoading');
+            const errorDiv = document.getElementById('error');
+            const matchedSection = document.getElementById('matchedSection');
+            const matchedResults = document.getElementById('matchedResults');
+
+            if (!currentRawResults) {
+                errorDiv.innerHTML = '<div class="error">No search results to match.</div>';
+                return;
+            }
+
+            const sortBy = document.getElementById('sortBy').value || 'price';
+            const sortOrder = document.getElementById('sortOrder').value || 'asc';
+
+            matchBtn.disabled = true;
+            matchingLoading.style.display = 'block';
+            matchedResults.innerHTML = '';
+
+            try {
+                const response = await fetch('/match', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        raw_results: currentRawResults.raw_results,
+                        sort_by: sortBy,
+                        sort_order: sortOrder
+                    })
+                });
+
+                if (!response.ok) {
+                    const data = await response.json().catch(() => ({}));
+                    throw new Error(data.error || 'Matching failed');
+                }
+
+                const data = await response.json();
+                renderMatchedProducts(data.matched_products || [], currentRawResults.locations || {});
+                matchedSection.style.display = 'block';
+            } catch (error) {
+                console.error(error);
+                errorDiv.innerHTML = '<div class="error">Error matching products: ' + (error.message || 'Something went wrong') + '</div>';
+            } finally {
+                matchingLoading.style.display = 'none';
+                matchBtn.disabled = false;
+            }
+        }
+
+        function renderMatchedProducts(matchedProducts, locations) {
+            const container = document.getElementById('matchedResults');
+
+            if (!matchedProducts || matchedProducts.length === 0) {
+                container.innerHTML = '<div class="no-matches">No exact SKU matches across stores yet. Try a more specific query like "bayara moong dal 1kg".</div>';
+                return;
+            }
+
+            // Build comparison table
+            let html = '<div class="comparison-table-wrapper">';
+            html += '<table class="comparison-table">';
+            html += '<thead><tr>' +
+                    '<th>Product</th>' +
+                    '<th>Quantity</th>' +
+                    '<th>Brand</th>' +
+                    '<th>Carrefour</th>' +
+                    '<th>Noon</th>' +
+                    '<th>Talabat</th>' +
+                    '<th>Best price</th>' +
+                    '</tr></thead><tbody>';
+
+            matchedProducts.forEach(p => {
+                const stores = p.stores || {};
+                const prices = [];
+                ['carrefour', 'noon', 'talabat'].forEach(s => {
+                    const info = stores[s];
+                    if (info && typeof info.price === 'number') {
+                        prices.push({ store: s, price: info.price });
+                    }
+                });
+
+                const hasPrices = prices.length > 0;
+                const minPrice = hasPrices ? Math.min(...prices.map(x => x.price)) : null;
+                const bestStores = hasPrices ? prices.filter(x => x.price === minPrice).map(x => x.store) : [];
+
+                html += '<tr>';
+
+                // Product name
+                html += `<td class="product-name-cell">${escapeHtml(p.matched_name || '')}</td>`;
+
+                // Quantity
+                let qtyText = '';
+                if (p.quantity_value && p.quantity_unit) {
+                    qtyText = `${p.quantity_value} ${p.quantity_unit}`;
+                }
+                html += `<td>${qtyText ? `<span class="quantity-badge">${escapeHtml(qtyText)}</span>` : '<span class="muted">n/a</span>'}</td>`;
+
+                // Brand
+                html += `<td>${p.brand ? `<span class="brand-text">${escapeHtml(p.brand)}</span>` : '<span class="muted">n/a</span>'}</td>`;
+
+                // Store price cells
+                ['carrefour', 'noon', 'talabat'].forEach(store => {
+                    const info = stores[store];
+                    if (info && typeof info.price === 'number') {
+                        const isBest = bestStores.includes(store);
+                        html += `<td class="price-cell${isBest ? ' best-price' : ''}">` +
+                                `<span class="price-value">AED ${info.price.toFixed(2)}</span>` +
+                                '</td>';
+                    } else {
+                        html += '<td class="price-cell muted">—</td>';
+                    }
+                });
+
+                // Best price summary
+                if (hasPrices) {
+                    const bestStoreNames = bestStores.map(s => s.charAt(0).toUpperCase() + s.slice(1));
+                    html += '<td class="price-cell">' +
+                            `<span class="price-value">AED ${minPrice.toFixed(2)}</span>` +
+                            `<span class="best-price-badge">💰 ${escapeHtml(bestStoreNames.join(', '))}</span>` +
+                            '</td>';
+                } else {
+                    html += '<td class="price-cell muted">n/a</td>';
+                }
+
+                html += '</tr>';
+            });
+
+            html += '</tbody></table></div>';
+            container.innerHTML = html;
+        }
+
+        function renderRawResults(rawData) {
+            const results = document.getElementById('rawResults');
+            results.innerHTML = '';
+
             const stores = [
-                { name: 'Carrefour', key: 'carrefour', class: 'carrefour' },
-                { name: 'Noon', key: 'noon', class: 'noon' },
-                { name: 'Talabat', key: 'talabat', class: 'talabat' }
+                { name: 'Carrefour', key: 'carrefour', className: 'carrefour' },
+                { name: 'Noon', key: 'noon', className: 'noon' },
+                { name: 'Talabat', key: 'talabat', className: 'talabat' }
             ];
-            
+
             stores.forEach(store => {
-                const storeData = data[store.key] || {};
-                const products = storeData.products || storeData || [];
+                const storeData = rawData[store.key] || {};
+                const products = Array.isArray(storeData.products) ? storeData.products : (Array.isArray(storeData) ? storeData : []);
                 const location = storeData.location;
-                
+
                 const card = document.createElement('div');
-                card.className = `store-card ${store.class}`;
-                
+                card.className = `store-card ${store.className}`;
+
                 let locationHTML = '';
                 if (location) {
-                    locationHTML = `<div class="store-location">📍 ${location}</div>`;
+                    locationHTML = `<div class="store-location">📍 ${escapeHtml(location)}</div>`;
                 }
-                
+
                 let productsHTML = '';
-                if (products.length === 0) {
+                if (!products || products.length === 0) {
                     productsHTML = '<div class="no-results">No results found</div>';
                 } else {
                     products.forEach(product => {
                         productsHTML += `
-                            <div class="product">
-                                <div class="product-name">${product.name}</div>
-                                <div class="product-price">${product.price}</div>
+                            <div class="product-row">
+                                <div class="product-row-name">${escapeHtml(product.name || '')}</div>
+                                <div class="product-row-price">${escapeHtml(product.price || '')}</div>
                             </div>
                         `;
                     });
                 }
-                
+
                 card.innerHTML = `
                     <div class="store-header">
                         ${store.name}
@@ -430,9 +847,19 @@
                     </div>
                     ${productsHTML}
                 `;
-                
+
                 results.appendChild(card);
             });
+        }
+
+
+        function escapeHtml(str) {
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
         }
     </script>
 </body>

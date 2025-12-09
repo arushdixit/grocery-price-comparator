@@ -3,6 +3,7 @@ import re
 import os
 import requests
 import json
+import difflib
 from typing import List, Dict, Optional, Tuple
 
 def parse_price(price_str: str) -> Optional[float]:
@@ -125,26 +126,26 @@ def parse_products_with_ai(products: List[Dict], store_name: str, openrouter_api
         
         prompt = f"""Extract structured information from these grocery product names.
 
-For each product, identify:
-1. Brand name (e.g., "Bayara", "Nestle", "Almarai")
-2. Product name (e.g., "Moong Dal", "Milk", "Basmati Rice")
-3. Quantity value and unit (e.g., 1, "kg" or 500, "ml")
+        For each product, identify:
+        1. Brand name (e.g., "Bayara", "Nestle", "Almarai")
+        2. Product name (e.g., "Moong Dal", "Milk", "Basmati Rice")
+        3. Quantity value and unit (e.g., 1, "kg" or 500, "ml")
 
-Products from {store_name}:
-{json.dumps([p['name'] for p in products_subset], ensure_ascii=False)}
+        Products from {store_name}:
+        {json.dumps([p['name'] for p in products_subset], ensure_ascii=False)}
 
-Return JSON only (no other text):
-{{
-  "parsed": [
-    {{
-      "original_name": "exact name from input",
-      "brand": "Brand Name" or null,
-      "product_name": "Product Name",
-      "quantity_value": 1.0 or null,
-      "quantity_unit": "kg" or null
-    }}
-  ]
-}}"""
+        Return JSON only (no other text):
+        {{
+        "parsed": [
+            {{
+            "original_name": "exact name from input",
+            "brand": "Brand Name" or null,
+            "product_name": "Product Name",
+            "quantity_value": 1.0 or null,
+            "quantity_unit": "kg" or null
+            }}
+        ]
+        }}"""
 
         model = os.getenv('OPENROUTER_MODEL', 'meta-llama/llama-3.1-8b-instruct:free')
         
@@ -158,8 +159,7 @@ Return JSON only (no other text):
                 "model": model,
                 "messages": [{"role": "user", "content": prompt}],
                 "temperature": 0.1,
-            },
-            timeout=30
+            }
         )
         
         if response.status_code == 200:
@@ -187,6 +187,7 @@ Return JSON only (no other text):
                         'store': store_name
                     })
             
+            print(f"[AI Parse] {store_name} Parsed {len(result_products)} products")
             return result_products
         else:
             print(f"[AI Parse] {store_name} API error: {response.status_code}")
@@ -197,105 +198,114 @@ Return JSON only (no other text):
         return []
 
 
-def group_parsed_products(parsed_products: List[Dict], openrouter_api_key: str) -> List[Dict]:
+def group_parsed_products(parsed_products: List[Dict]) -> List[Dict]:
     """
-    Step 2: Group parsed products by matching brand + quantity
+    Step 2: Group parsed products by matching brand + quantity + name similarity
     
     Args:
         parsed_products: List of parsed products from all stores
-        openrouter_api_key: OpenRouter API key
     
     Returns:
         List of matched product groups
     """
-    if not parsed_products or not openrouter_api_key:
+    if not parsed_products:
         return []
     
-    try:
-        prompt = f"""Group these parsed grocery products that are IDENTICAL (same brand AND same quantity).
-
-Parsed products:
-{json.dumps(parsed_products, ensure_ascii=False)}
-
-RULES:
-1. Products match ONLY if brand AND quantity are the same
-2. "Bayara" 1kg ≠ "Bayara" 800g (different quantities)
-3. "Almarai" 1L = "Almarai" 1L (same brand + quantity)
-4. Group products found in at least 2 different stores
-
-Return JSON only:
-{{
-  "groups": [
-    {{
-      "matched_name": "Brand Product - Quantity",
-      "brand": "Brand",
-      "quantity_value": 1.0,
-      "quantity_unit": "kg",
-      "products": [
-        {{"store": "carrefour", "original_name": "...", "price": "AED 12.50"}},
-        {{"store": "noon", "original_name": "...", "price": "AED 13.00"}}
-      ]
-    }}
-  ]
-}}"""
-
-        model = os.getenv('OPENROUTER_MODEL', 'meta-llama/llama-3.1-8b-instruct:free')
+    # 1. Bucket by Brand + Quantity (Exact Match)
+    buckets = {}
+    for p in parsed_products:
+        # Normalize brand
+        brand = p.get('brand')
+        if brand:
+            brand = brand.strip().lower()
+        else:
+            brand = "unknown"
+            
+        # Get Quantity
+        qty_val = p.get('quantity_value')
+        qty_unit = p.get('quantity_unit')
         
-        response = requests.post(
-            url="https://openrouter.ai/api/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {openrouter_api_key}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "model": model,
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.1,
-            },
-            timeout=30
-        )
+        # Create a key tuple
+        key = (brand, qty_val, qty_unit)
         
-        if response.status_code == 200:
-            result = response.json()
-            content = result['choices'][0]['message']['content']
+        if key not in buckets:
+            buckets[key] = []
+        buckets[key].append(p)
+        
+    matched_groups = []
+    
+    # 2. Cluster within buckets by Name Similarity
+    for key, items in buckets.items():
+        # If bucket has items from less than 2 distinct stores, skip it entirely
+        # (We only want matches found in at least 2 stores)
+        stores_in_bucket = {x.get('store') for x in items if x.get('store')}
+        if len(stores_in_bucket) < 2:
+            continue
             
-            json_match = re.search(r'```(?:json)?\s*(.*?)\s*```', content, re.DOTALL)
-            if json_match:
-                content = json_match.group(1)
+        # Determine strictness based on whether brand is known
+        brand_known = key[0] != "unknown"
+        threshold = 0.6 if brand_known else 0.8
+        
+        # Simple clustering
+        clusters = []
+        processed_indexes = set()
+        
+        for i in range(len(items)):
+            if i in processed_indexes:
+                continue
             
-            grouped_data = json.loads(content)
-            groups = grouped_data.get('groups', [])
+            current_cluster = [items[i]]
+            processed_indexes.add(i)
             
-            # Convert to final format
-            matched_products = []
-            for group in groups:
-                stores_dict = {}
-                for prod in group.get('products', []):
-                    store = prod.get('store')
-                    if store:
+            base_name = items[i].get('original_name', '').lower()
+            
+            for j in range(i + 1, len(items)):
+                if j in processed_indexes:
+                    continue
+                
+                compare_name = items[j].get('original_name', '').lower()
+                
+                # Check similarity
+                ratio = difflib.SequenceMatcher(None, base_name, compare_name).ratio()
+                
+                if ratio >= threshold:
+                    current_cluster.append(items[j])
+                    processed_indexes.add(j)
+            
+            clusters.append(current_cluster)
+            
+        # 3. Format valid clusters
+        for cluster in clusters:
+            stores_dict = {}
+            for prod in cluster:
+                store = prod.get('store')
+                if store:
+                    # Keep the lowest price if duplicate store in cluster
+                    current_price = parse_price(prod.get('price', ''))
+                    
+                    if store not in stores_dict or (current_price is not None and 
+                        (stores_dict[store]['price'] is None or current_price < stores_dict[store]['price'])):
+                        
                         stores_dict[store] = {
                             'name': prod.get('original_name', ''),
-                            'price': parse_price(prod.get('price', ''))
+                            'price': current_price
                         }
+            
+            # Final check: Must have at least 2 stores
+            if len(stores_dict) >= 2:
+                # Use the most common product name or the first one as the matched name
+                # For simplicity, use the first product's name minus " - Store" if present
+                clean_name = cluster[0].get('product_name') or cluster[0].get('original_name')
                 
-                # Only include if at least 2 stores
-                if len(stores_dict) >= 2:
-                    matched_products.append({
-                        'matched_name': group.get('matched_name', ''),
-                        'brand': group.get('brand'),
-                        'quantity_value': group.get('quantity_value'),
-                        'quantity_unit': group.get('quantity_unit'),
-                        'stores': stores_dict
-                    })
-            
-            return matched_products
-        else:
-            print(f"[AI Group] API error: {response.status_code}")
-            return []
-            
-    except Exception as e:
-        print(f"[AI Group] Error: {str(e)}")
-        return []
+                matched_groups.append({
+                    'matched_name': f"{key[0].title()} {clean_name} {key[1] or ''}{key[2] or ''}".strip(),
+                    'brand': cluster[0].get('brand'),
+                    'quantity_value': cluster[0].get('quantity_value'),
+                    'quantity_unit': cluster[0].get('quantity_unit'),
+                    'stores': stores_dict
+                })
+
+    return matched_groups
 
 
 def match_products_with_ai(store_results: Dict[str, Dict], openrouter_api_key: str) -> List[Dict]:
@@ -314,41 +324,31 @@ def match_products_with_ai(store_results: Dict[str, Dict], openrouter_api_key: s
         return fallback_matching(store_results)
     
     try:
-        from concurrent.futures import ThreadPoolExecutor
-        
-        # Step 1: Parse products from each store (in parallel)
-        print("[AI Matching] Step 1: Parsing products in parallel...")
+        # Parse products from each store sequentially
+        print("[AI Matching] Parsing products sequentially...")
         all_parsed = []
         
-        # Prepare tasks for parallel execution
-        tasks = []
         for store_name in ['carrefour', 'noon', 'talabat']:
             products = store_results.get(store_name, {}).get('products', [])
             products = [p for p in products if 'Error' not in p.get('name', '') and p.get('name') != 'No results found']
             
             if products:
-                tasks.append((products, store_name, openrouter_api_key))
-        
-        # Execute parsing in parallel
-        with ThreadPoolExecutor(max_workers=3) as executor:
-            futures = [executor.submit(parse_products_with_ai, *task) for task in tasks]
-            for future in futures:
                 try:
-                    result = future.result(timeout=40)  # 40 second timeout per store
+                    result = parse_products_with_ai(products, store_name, openrouter_api_key)
                     if result:
                         all_parsed.extend(result)
                 except Exception as e:
-                    print(f"[AI Matching] Parse error: {str(e)}")
+                    print(f"[AI Matching] Parse error for {store_name}: {str(e)}")
         
         if not all_parsed:
             print("[AI Matching] No products parsed, using fallback")
             return fallback_matching(store_results)
         
-        print(f"[AI Matching] Parsed {len(all_parsed)} products from {len([t for t in tasks])} stores")
+        print(f"[AI Matching] Parsed {len(all_parsed)} products")
         
         # Step 2: Group parsed products
         print("[AI Matching] Step 2: Grouping matches...")
-        matched_products = group_parsed_products(all_parsed, openrouter_api_key)
+        matched_products = group_parsed_products(all_parsed)
         
         print(f"[AI Matching] Successfully matched {len(matched_products)} product groups")
         return matched_products

@@ -143,7 +143,7 @@ def search_carrefour(item):
         # Find product containers
         product_containers = soup.find_all('div', class_=lambda x: x and 'max-w-' in str(x) and 'sm:max-w-' in str(x))
         
-        for container in product_containers[:20]:
+        for container in product_containers[:60]:
             try:
                 # Find the link with product name (skip labels like "Bestseller")
                 link = container.find('a', href=True)
@@ -244,7 +244,7 @@ def search_noon(item):
         # Find product boxes
         product_boxes = soup.find_all('div', class_=lambda x: x and 'ProductBox_detailsSection' in x)
         
-        for product in product_boxes[:20]:  # Limit to 20 results
+        for product in product_boxes[:60]:  # Limit to 60 results
             try:
                 name_elem = product.find('h2', class_=lambda x: x and 'ProductBox_title' in x)
                 price_elem = product.find('strong', class_=lambda x: x and 'Price_productPrice' in x)
@@ -297,7 +297,7 @@ def search_talabat(item):
         params = {
             'countryId': '4',  # UAE
             'query': item,
-            'limit': '20',
+            'limit': '60',
             'offset': '0',
             'isDarkstore': 'true',
             'isMigrated': 'false',
@@ -315,7 +315,7 @@ def search_talabat(item):
             items = data.get('items', [])
             products = []
             
-            for product in items[:20]:
+            for product in items[:60]:
                 try:
                     title = product.get('title', '')
                     price = product.get('price')
@@ -445,9 +445,10 @@ def match():
     
     # Get OpenRouter API key from environment
     openrouter_api_key = os.getenv('OPENROUTER_API_KEY')
+    product_name = data.get('product_name', '')
     
     # Match products across stores using AI
-    matched_products = match_products_with_ai(raw_results, openrouter_api_key)
+    matched_products = match_products_with_ai(raw_results, openrouter_api_key, query=product_name)
     
     # Sort products
     ascending = (sort_order == 'asc')

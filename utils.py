@@ -21,8 +21,10 @@ def parse_price(price_str: str) -> Optional[float]:
     
     try:
         # Remove currency symbols and extract numbers
-        # Matches patterns like: "12.50", "AED 12.50", "12,50"
-        match = re.search(r'(\d+[.,]\d+|\d+)', str(price_str).replace(',', '.'))
+        # Matches patterns like: "12.50", "AED 12.50", "12,50", "1,200.50"
+        # Fix: Remove commas before regex to avoid treating "1,200" as "1.200" or breaking regex
+        clean_str = str(price_str).replace(',', '')
+        match = re.search(r'(\d+\.?\d*|\d+)', clean_str)
         if match:
             return float(match.group(1))
     except (ValueError, AttributeError):
@@ -44,34 +46,44 @@ def extract_quantity(product_name: str) -> Tuple[Optional[float], Optional[str]]
         return None, None
     
     # Pattern matches: 1kg, 500g, 1.5L, 250ml, 1 kg, 500 g, etc.
+    # ORDER MATTERS: precise multipack patterns first
     patterns = [
-        r'(\d+\.?\d*)\s*(kg|g|l|ml|ltr|litre|liter|gram|grams|kilogram|kilograms)',
-        r'(\d+\.?\d*)\s*x\s*(\d+\.?\d*)\s*(kg|g|l|ml|ltr)',  # 2 x 500g
-        r'(\d+)\s*pack\s*x\s*(\d+\.?\d*)\s*(kg|g|l|ml)',      # 2 pack x 500g
+        # 2 x 500g, 6x200ml
+        (r'(\d+\.?\d*)\s*[xX]\s*(\d+\.?\d*)\s*(kg|g|l|ml|m|ltr|litre|liter|gram|grams|kilogram|kilograms)', True),
+        # 2 pack x 500g
+        (r'(\d+)\s*pack\s*[xX]\s*(\d+\.?\d*)\s*(kg|g|l|ml|m|ltr|litre|liter|gram|grams|kilogram|kilograms)', True),
+        # Standard: 1.5kg
+        (r'(\d+\.?\d*)\s*(kg|g|l|ml|m|ltr|litre|liter|gram|grams|kilogram|kilograms)', False),
     ]
     
-    for pattern in patterns:
+    for pattern, is_multipack in patterns:
         match = re.search(pattern, product_name.lower())
         if match:
             groups = match.groups()
-            if len(groups) >= 2:
-                try:
+            try:
+                if is_multipack and len(groups) >= 3:
+                     # count * size
+                     count = float(groups[0])
+                     size = float(groups[1])
+                     unit = groups[2].lower()
+                     value = count * size
+                else:
                     value = float(groups[0])
                     unit = groups[-1].lower()
-                    
-                    # Normalize unit
-                    if unit in ['kg', 'kilogram', 'kilograms']:
-                        return value, 'kg'
-                    elif unit in ['g', 'gram', 'grams']:
-                        return value, 'g'
-                    elif unit in ['l', 'ltr', 'litre', 'liter']:
-                        return value, 'l'
-                    elif unit in ['ml']:
-                        return value, 'ml'
-                    
-                    return value, unit
-                except (ValueError, IndexError):
-                    continue
+                
+                # Normalize unit strings
+                if unit in ['kg', 'kilogram', 'kilograms']:
+                    return value, 'kg'
+                elif unit in ['g', 'gram', 'grams']:
+                    return value, 'g'
+                elif unit in ['l', 'ltr', 'litre', 'liter']:
+                    return value, 'l'
+                elif unit in ['ml', 'm']:
+                    return value, 'ml'
+                
+                return value, unit
+            except (ValueError, IndexError):
+                continue
     
     return None, None
 
@@ -107,7 +119,7 @@ def normalize_quantity(value: float, unit: str) -> float:
 
 def parse_products_with_ai(products: List[Dict], store_name: str, openrouter_api_key: str) -> List[Dict]:
     """
-    Step 1: Parse individual products to extract structured data
+    Step 1: Parse individual products to extract structured data (AI Version)
     
     Args:
         products: List of products from a single store
@@ -197,6 +209,56 @@ def parse_products_with_ai(products: List[Dict], store_name: str, openrouter_api
         print(f"[AI Parse] {store_name} Error: {str(e)}")
         return []
 
+def parse_products_regex(products: List[Dict], store_name: str) -> List[Dict]:
+    """
+    Step 1: Parse individual products to extract structured data using Regex/Heuristics
+    Switched from AI to Python logic to avoid API rate limits.
+    
+    Args:
+        products: List of products from a single store
+        store_name: Name of the store
+    
+    Returns:
+        List of parsed products with extracted brand, name, quantity
+    """
+    if not products:
+        return []
+    
+    print(f"[Parser] Parsing {len(products)} products from {store_name} using regex...")
+    result_products = []
+    
+    for product in products:
+        original_name = product.get('name', '')
+        if not original_name:
+            continue
+            
+        # 1. Extract Quantity
+        qty_val, qty_unit = extract_quantity(original_name)
+        
+        # 2. Extract Brand & Product Name
+        # Strict Rule 1: Brand is ALWAYS the first word
+        parts = original_name.strip().split(' ', 1)
+        brand = parts[0].strip()
+        
+        # Strict Rule 2: Product Name is alphanumeric only (preserved spaces)
+        raw_name = parts[1].strip() if len(parts) > 1 else ""
+        # Remove anything that isn't alphanumeric or space
+        product_name = re.sub(r'[^a-zA-Z0-9\s]', '', raw_name)
+        # Clean up multiple spaces
+        product_name = re.sub(r'\s+', ' ', product_name).strip()
+
+        result_products.append({
+            'original_name': original_name,
+            'brand': brand,
+            'product_name': product_name,
+            'quantity_value': qty_val,
+            'quantity_unit': qty_unit,
+            'price': product.get('price'),
+            'store': store_name
+        })
+            
+    return result_products
+
 
 def group_parsed_products(parsed_products: List[Dict]) -> List[Dict]:
     """
@@ -236,15 +298,9 @@ def group_parsed_products(parsed_products: List[Dict]) -> List[Dict]:
     
     # 2. Cluster within buckets by Name Similarity
     for key, items in buckets.items():
-        # If bucket has items from less than 2 distinct stores, skip it entirely
-        # (We only want matches found in at least 2 stores)
-        stores_in_bucket = {x.get('store') for x in items if x.get('store')}
-        if len(stores_in_bucket) < 2:
-            continue
-            
         # Determine strictness based on whether brand is known
         brand_known = key[0] != "unknown"
-        threshold = 0.6 if brand_known else 0.8
+        threshold = 0.9 # High threshold to avoid grouping different products
         
         # Simple clustering
         clusters = []
@@ -277,11 +333,16 @@ def group_parsed_products(parsed_products: List[Dict]) -> List[Dict]:
         # 3. Format valid clusters
         for cluster in clusters:
             stores_dict = {}
+            min_price = float('inf')
+            
             for prod in cluster:
                 store = prod.get('store')
                 if store:
                     # Keep the lowest price if duplicate store in cluster
                     current_price = parse_price(prod.get('price', ''))
+                    
+                    if current_price is not None and current_price < min_price:
+                        min_price = current_price
                     
                     if store not in stores_dict or (current_price is not None and 
                         (stores_dict[store]['price'] is None or current_price < stores_dict[store]['price'])):
@@ -291,41 +352,53 @@ def group_parsed_products(parsed_products: List[Dict]) -> List[Dict]:
                             'price': current_price
                         }
             
-            # Final check: Must have at least 2 stores
-            if len(stores_dict) >= 2:
-                # Use the most common product name or the first one as the matched name
-                # For simplicity, use the first product's name minus " - Store" if present
-                clean_name = cluster[0].get('product_name') or cluster[0].get('original_name')
-                
-                matched_groups.append({
-                    'matched_name': f"{key[0].title()} {clean_name} {key[1] or ''}{key[2] or ''}".strip(),
-                    'brand': cluster[0].get('brand'),
-                    'quantity_value': cluster[0].get('quantity_value'),
-                    'quantity_unit': cluster[0].get('quantity_unit'),
-                    'stores': stores_dict
-                })
+            # Calculate normalized unit price (Price per base unit)
+            normalized_qty = 0
+            unit_price = None
+            
+            qty_val = cluster[0].get('quantity_value')
+            qty_unit = cluster[0].get('quantity_unit')
+            
+            if qty_val and qty_unit:
+                normalized_qty = normalize_quantity(qty_val, qty_unit)
+                if normalized_qty > 0 and min_price != float('inf'):
+                    # Calculate price per kg or per L (normalized_qty is in g or ml)
+                    unit_price = (min_price / normalized_qty) * 1000
+
+            # Use the most common product name or the first one as the matched name
+            clean_name = cluster[0].get('product_name') or cluster[0].get('original_name')
+            
+            # Key is (brand, qty_val, qty_unit)
+            matched_groups.append({
+                'matched_name': f"{key[0].title()} {clean_name} {key[1] or ''}{key[2] or ''}".strip(),
+                'brand': cluster[0].get('brand'),
+                'quantity_value': qty_val,
+                'quantity_unit': qty_unit,
+                'normalized_unit_price': unit_price,
+                'stores': stores_dict
+            })
 
     return matched_groups
 
 
-def match_products_with_ai(store_results: Dict[str, Dict], openrouter_api_key: str) -> List[Dict]:
+def match_products_with_ai(store_results: Dict[str, Dict], openrouter_api_key: str, query: str = None) -> List[Dict]:
     """
-    Two-step AI matching: parse then group
+    Two-step product matching:
+    1. Parse products (using Regex/Heuristics now)
+    2. Group products (using Python logic)
+    3. Sort by Unit Price and identify Exact Matches
     
     Args:
         store_results: Dict with keys 'carrefour', 'noon', 'talabat' containing product lists
-        openrouter_api_key: OpenRouter API key
+        openrouter_api_key: Unused now, kept for signature compatibility
+        query: Search query string to identify exact matches
     
     Returns:
         List of matched products with unified structure
     """
-    if not openrouter_api_key:
-        print("[AI Matching] No API key provided, using fallback")
-        return fallback_matching(store_results)
-    
     try:
         # Parse products from each store sequentially
-        print("[AI Matching] Parsing products sequentially...")
+        print("[Matcher] Parsing products sequentially using Python logic...")
         all_parsed = []
         
         for store_name in ['carrefour', 'noon', 'talabat']:
@@ -334,28 +407,56 @@ def match_products_with_ai(store_results: Dict[str, Dict], openrouter_api_key: s
             
             if products:
                 try:
-                    result = parse_products_with_ai(products, store_name, openrouter_api_key)
+                    # Switch parsers here:
+                    # Option B: Use Regex Parser (Default)
+                    result = parse_products_regex(products, store_name)
+                    
                     if result:
                         all_parsed.extend(result)
                 except Exception as e:
-                    print(f"[AI Matching] Parse error for {store_name}: {str(e)}")
+                    print(f"[Matcher] Parse error for {store_name}: {str(e)}")
         
         if not all_parsed:
-            print("[AI Matching] No products parsed, using fallback")
-            return fallback_matching(store_results)
+            print("[Matcher] No products parsed, returning empty list.")
+            return []
         
-        print(f"[AI Matching] Parsed {len(all_parsed)} products")
+        print(f"[Matcher] Parsed {len(all_parsed)} products")
         
         # Step 2: Group parsed products
-        print("[AI Matching] Step 2: Grouping matches...")
+        print("[Matcher] Step 2: Grouping matches...")
         matched_products = group_parsed_products(all_parsed)
         
-        print(f"[AI Matching] Successfully matched {len(matched_products)} product groups")
+        # Step 3: Identify Match Type and Sort by Unit Price
+        if matched_products:
+            query_terms = query.lower().split() if query else []
+            
+            for item in matched_products:
+                # Determine match type
+                match_type = 'partial'
+                if query_terms:
+                    name = item.get('matched_name', '').lower()
+                    present_count = sum(1 for term in query_terms if term in name)
+                    if present_count == len(query_terms):
+                        match_type = 'exact'
+                
+                item['match_type'] = match_type
+            
+            def get_sort_key(item):
+                # Primary Sort: Normalized Unit Price (Ascending)
+                unit_price = item.get('normalized_unit_price')
+                if unit_price is None:
+                    unit_price = float('inf')
+                return unit_price
+            
+            # Sort all items purely by price per unit first
+            matched_products.sort(key=get_sort_key)
+        
+        print(f"[Matcher] Successfully matched {len(matched_products)} product groups")
         return matched_products
             
     except Exception as e:
-        print(f"[AI Matching] Error: {str(e)}")
-        return fallback_matching(store_results)
+        print(f"[Matcher] Error: {str(e)}")
+        return []
 
 def fallback_matching(store_results: Dict[str, Dict]) -> List[Dict]:
     """

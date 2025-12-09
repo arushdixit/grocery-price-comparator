@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -24,7 +25,7 @@
             background: white;
             border-radius: 15px;
             padding: 30px 30px 40px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
         }
 
         h1 {
@@ -184,9 +185,20 @@
             font-weight: 500;
         }
 
-        .status-loading { background: #fff3cd; color: #856404; }
-        .status-ready   { background: #d4edda; color: #155724; }
-        .status-error   { background: #f8d7da; color: #721c24; }
+        .status-loading {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status-ready {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-error {
+            background: #f8d7da;
+            color: #721c24;
+        }
 
         .spinner {
             width: 14px;
@@ -198,8 +210,13 @@
         }
 
         @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
         }
 
         .loading {
@@ -346,6 +363,13 @@
             font-size: 0.9em;
         }
 
+        .unit-price-footnote {
+            font-size: 0.72em;
+            color: #718096;
+            margin-top: 2px;
+            font-weight: normal;
+        }
+
         .raw-section {
             margin-top: 24px;
         }
@@ -386,7 +410,7 @@
 
         .store-card:hover {
             transform: translateY(-2px);
-            box-shadow: 0 4px 14px rgba(0,0,0,0.08);
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
         }
 
         .store-header {
@@ -407,9 +431,17 @@
             gap: 4px;
         }
 
-        .carrefour { border-left: 4px solid #0066cc; }
-        .noon      { border-left: 4px solid #ffcc00; }
-        .talabat   { border-left: 4px solid #ff6600; }
+        .carrefour {
+            border-left: 4px solid #0066cc;
+        }
+
+        .noon {
+            border-left: 4px solid #ffcc00;
+        }
+
+        .talabat {
+            border-left: 4px solid #ff6600;
+        }
 
         .product-row {
             padding: 10px 8px;
@@ -442,17 +474,10 @@
             font-size: 0.85em;
         }
 
-        @media (max-width: 768px) {
-            .container {
-                padding: 20px 16px 26px;
-            }
-
-            h1 {
-                font-size: 1.8em;
-            }
-        }
+        /* ... existing styles ... */
     </style>
 </head>
+
 <body>
     <div class="container">
         <h1>Dubai Grocery Price Comparator</h1>
@@ -460,12 +485,9 @@
 
         <div class="header-row">
             <div class="search-box">
-                <input
-                    type="text"
-                    id="searchInput"
+                <input type="text" id="searchInput"
                     placeholder="Enter grocery item (e.g., bayara moong dal, milk, basmati rice)..."
-                    onkeypress="if(event.key==='Enter') searchGrocery()"
-                >
+                    onkeypress="if(event.key==='Enter') searchGrocery()">
                 <button id="searchBtn" onclick="searchGrocery()">Search</button>
             </div>
 
@@ -512,7 +534,7 @@
 
         <button id="matchBtn" onclick="matchProducts()">🤖 Match Products with AI</button>
 
-        <div class="raw-section">
+        <div class="raw-section" id="rawSection" style="display: none;">
             <div class="section-header">
                 <div>
                     <div class="section-title">Raw results by store</div>
@@ -521,6 +543,11 @@
             </div>
             <div class="matched-note" id="locationNote"></div>
             <div id="rawResults" class="results-grid"></div>
+        </div>
+
+        <div style="text-align: center; margin-top: 20px;">
+            <button id="toggleRawBtn" class="toggle-raw-btn" onclick="toggleRawResults()" style="display: none;">Show
+                Raw Results</button>
         </div>
 
         <div class="matched-section" id="matchedSection" style="display: none;">
@@ -533,8 +560,160 @@
             <div id="matchedResults"></div>
         </div>
     </div>
-
     <script>
+        // ... existing script ...
+
+        function toggleRawResults() {
+            const section = document.getElementById('rawSection');
+            const btn = document.getElementById('toggleRawBtn');
+            if (section.style.display === 'none') {
+                section.style.display = 'block';
+                btn.textContent = 'Hide Raw Results';
+            } else {
+                section.style.display = 'none';
+                btn.textContent = 'Show Raw Results';
+            }
+        }
+
+        function renderMatchedProducts(matchedProducts, locations) {
+            const container = document.getElementById('matchedResults');
+
+            if (!matchedProducts || matchedProducts.length === 0) {
+                container.innerHTML = '<div class="no-matches">No exact SKU matches across stores yet. Try a more specific query like "bayara moong dal 1kg".</div>';
+                return;
+            }
+
+            // Split into Exact Match and Other Match
+            const exactMatches = matchedProducts.filter(p => p.match_type === 'exact');
+            const otherMatches = matchedProducts.filter(p => p.match_type !== 'exact');
+
+            let html = '';
+
+            // Helper to build table HTML
+            const buildTable = (products, title) => {
+                if (products.length === 0) return '';
+
+                let section = `<div class="section-header"><div class="section-title">${title}</div></div>`;
+                section += '<div class="comparison-table-wrapper"><table class="comparison-table">';
+                section += '<thead><tr>' +
+                    '<th>Product</th>' +
+                    '<th>Quantity</th>' +
+                    '<th>Brand</th>' +
+                    '<th>Carrefour</th>' +
+                    '<th>Noon</th>' +
+                    '<th>Talabat</th>' +
+                    '<th>Best price</th>' +
+                    '</tr></thead><tbody>';
+
+                products.forEach(p => {
+                    const stores = p.stores || {};
+                    const prices = [];
+                    ['carrefour', 'noon', 'talabat'].forEach(s => {
+                        const info = stores[s];
+                        if (info && typeof info.price === 'number') {
+                            prices.push({ store: s, price: info.price });
+                        }
+                    });
+
+                    const hasPrices = prices.length > 0;
+                    const minPrice = hasPrices ? Math.min(...prices.map(x => x.price)) : null;
+                    const bestStores = hasPrices ? prices.filter(x => x.price === minPrice).map(x => x.store) : [];
+
+                    section += '<tr>';
+
+                    // Product name
+                    section += `<td class="product-name-cell">${escapeHtml(p.matched_name || '')}</td>`;
+
+                    // Quantity
+                    let qtyText = '';
+                    let baseQty = 0;
+                    let baseUnit = '';
+
+                    if (p.quantity_value && p.quantity_unit) {
+                        qtyText = `${p.quantity_value} ${p.quantity_unit}`;
+
+                        // Normalize to kg or L for unit price calc
+                        const u = p.quantity_unit.toLowerCase();
+                        if (u === 'g' || u === 'gram' || u === 'grams') {
+                            baseQty = p.quantity_value / 1000;
+                            baseUnit = 'kg';
+                        } else if (u === 'ml' || u === 'm') {
+                            baseQty = p.quantity_value / 1000;
+                            baseUnit = 'L';
+                        } else if (u === 'kg' || u === 'kilogram') {
+                            baseQty = p.quantity_value;
+                            baseUnit = 'kg';
+                        } else if (u === 'l' || u === 'liter' || u === 'litre') {
+                            baseQty = p.quantity_value;
+                            baseUnit = 'L';
+                        }
+                    }
+                    section += `<td>${qtyText ? `<span class="quantity-badge">${escapeHtml(qtyText)}</span>` : '<span class="muted">n/a</span>'}</td>`;
+
+                    // Brand
+                    section += `<td>${p.brand ? `<span class="brand-text">${escapeHtml(p.brand)}</span>` : '<span class="muted">n/a</span>'}</td>`;
+
+                    // Store price cells
+                    ['carrefour', 'noon', 'talabat'].forEach(store => {
+                        const info = stores[store];
+                        if (info && typeof info.price === 'number') {
+                            const isBest = bestStores.includes(store);
+                            let unitPrice = '';
+                            if (baseQty > 0) {
+                                unitPrice = `(AED ${(info.price / baseQty).toFixed(2)} / ${baseUnit})`;
+                            }
+
+                            section += `<td class="price-cell${isBest ? ' best-price' : ''}">` +
+                                `<div class="price-value">AED ${info.price.toFixed(2)}</div>` +
+                                (unitPrice ? `<div class="unit-price-footnote">${unitPrice}</div>` : '') +
+                                '</td>';
+                        } else {
+                            section += '<td class="price-cell muted">—</td>';
+                        }
+                    });
+
+                    // Best price summary
+                    if (hasPrices) {
+                        const bestStoreNames = bestStores.map(s => s.charAt(0).toUpperCase() + s.slice(1));
+
+                        let bestUnitPrice = '';
+                        if (baseQty > 0) {
+                            bestUnitPrice = `(AED ${(minPrice / baseQty).toFixed(2)} / ${baseUnit})`;
+                        }
+
+                        section += '<td class="price-cell">' +
+                            `<div class="price-value">AED ${minPrice.toFixed(2)}</div>` +
+                            (bestUnitPrice ? `<div class="unit-price-footnote">${bestUnitPrice}</div>` : '') +
+                            `<div class="best-price-badge" style="margin-top:4px">💰 ${escapeHtml(bestStoreNames.join(', '))}</div>` +
+                            '</td>';
+                    } else {
+                        section += '<td class="price-cell muted">n/a</td>';
+                    }
+
+                    section += '</tr>';
+                });
+                section += '</tbody></table></div>';
+                return section;
+            };
+
+            // Render Exact Matches
+            if (exactMatches.length > 0) {
+                html += buildTable(exactMatches, 'Exact Product Match Found');
+            }
+
+            // Render Other Matches
+            if (otherMatches.length > 0) {
+                html += buildTable(otherMatches, 'Other Matches');
+            }
+
+            if (!html) {
+                container.innerHTML = '<div class="no-matches">No matches found after filtering.</div>';
+            } else {
+                container.innerHTML = html;
+            }
+        }
+
+
         // ---------- Status polling ----------
         async function checkPreloadStatus() {
             try {
@@ -646,7 +825,7 @@
                 const data = await response.json();
                 currentRawResults = data;
                 renderRawResults(data.raw_results || data);
-                
+
                 // Show location note
                 const locations = data.locations || {};
                 const locationNote = document.getElementById('locationNote');
@@ -658,9 +837,16 @@
                     parts.push(`Noon: ${locations.noon}`);
                 }
                 locationNote.textContent = parts.length ? `Search locations · ${parts.join(' · ')}` : '';
-                
-                // Show match button
-                matchBtn.style.display = 'block';
+
+                locationNote.textContent = parts.length ? `Search locations · ${parts.join(' · ')}` : '';
+
+                // Hide Match button, trigger automatically
+                // matchBtn.style.display = 'block';
+                await matchProducts();
+
+                // Show toggle raw results button
+                document.getElementById('toggleRawBtn').style.display = 'inline-flex';
+
             } catch (error) {
                 console.error(error);
                 errorDiv.innerHTML = '<div class="error">Error: ' + (error.message || 'Something went wrong') + '</div>';
@@ -676,7 +862,7 @@
         }
 
         async function matchProducts() {
-            const matchBtn = document.getElementById('matchBtn');
+            // const matchBtn = document.getElementById('matchBtn');
             const matchingLoading = document.getElementById('matchingLoading');
             const errorDiv = document.getElementById('error');
             const matchedSection = document.getElementById('matchedSection');
@@ -690,9 +876,13 @@
             const sortBy = document.getElementById('sortBy').value || 'price';
             const sortOrder = document.getElementById('sortOrder').value || 'asc';
 
-            matchBtn.disabled = true;
+            // matchBtn.disabled = true;
             matchingLoading.style.display = 'block';
             matchedResults.innerHTML = '';
+
+            // Ensure raw results are hidden during matching to focus on results
+            document.getElementById('rawSection').style.display = 'none';
+            document.getElementById('toggleRawBtn').textContent = 'Show Raw Results';
 
             try {
                 const response = await fetch('/match', {
@@ -701,7 +891,8 @@
                     body: JSON.stringify({
                         raw_results: currentRawResults.raw_results,
                         sort_by: sortBy,
-                        sort_order: sortOrder
+                        sort_order: sortOrder,
+                        product_name: document.getElementById('searchInput').value.trim()
                     })
                 });
 
@@ -722,86 +913,9 @@
             }
         }
 
-        function renderMatchedProducts(matchedProducts, locations) {
-            const container = document.getElementById('matchedResults');
 
-            if (!matchedProducts || matchedProducts.length === 0) {
-                container.innerHTML = '<div class="no-matches">No exact SKU matches across stores yet. Try a more specific query like "bayara moong dal 1kg".</div>';
-                return;
-            }
 
-            // Build comparison table
-            let html = '<div class="comparison-table-wrapper">';
-            html += '<table class="comparison-table">';
-            html += '<thead><tr>' +
-                    '<th>Product</th>' +
-                    '<th>Quantity</th>' +
-                    '<th>Brand</th>' +
-                    '<th>Carrefour</th>' +
-                    '<th>Noon</th>' +
-                    '<th>Talabat</th>' +
-                    '<th>Best price</th>' +
-                    '</tr></thead><tbody>';
 
-            matchedProducts.forEach(p => {
-                const stores = p.stores || {};
-                const prices = [];
-                ['carrefour', 'noon', 'talabat'].forEach(s => {
-                    const info = stores[s];
-                    if (info && typeof info.price === 'number') {
-                        prices.push({ store: s, price: info.price });
-                    }
-                });
-
-                const hasPrices = prices.length > 0;
-                const minPrice = hasPrices ? Math.min(...prices.map(x => x.price)) : null;
-                const bestStores = hasPrices ? prices.filter(x => x.price === minPrice).map(x => x.store) : [];
-
-                html += '<tr>';
-
-                // Product name
-                html += `<td class="product-name-cell">${escapeHtml(p.matched_name || '')}</td>`;
-
-                // Quantity
-                let qtyText = '';
-                if (p.quantity_value && p.quantity_unit) {
-                    qtyText = `${p.quantity_value} ${p.quantity_unit}`;
-                }
-                html += `<td>${qtyText ? `<span class="quantity-badge">${escapeHtml(qtyText)}</span>` : '<span class="muted">n/a</span>'}</td>`;
-
-                // Brand
-                html += `<td>${p.brand ? `<span class="brand-text">${escapeHtml(p.brand)}</span>` : '<span class="muted">n/a</span>'}</td>`;
-
-                // Store price cells
-                ['carrefour', 'noon', 'talabat'].forEach(store => {
-                    const info = stores[store];
-                    if (info && typeof info.price === 'number') {
-                        const isBest = bestStores.includes(store);
-                        html += `<td class="price-cell${isBest ? ' best-price' : ''}">` +
-                                `<span class="price-value">AED ${info.price.toFixed(2)}</span>` +
-                                '</td>';
-                    } else {
-                        html += '<td class="price-cell muted">—</td>';
-                    }
-                });
-
-                // Best price summary
-                if (hasPrices) {
-                    const bestStoreNames = bestStores.map(s => s.charAt(0).toUpperCase() + s.slice(1));
-                    html += '<td class="price-cell">' +
-                            `<span class="price-value">AED ${minPrice.toFixed(2)}</span>` +
-                            `<span class="best-price-badge">💰 ${escapeHtml(bestStoreNames.join(', '))}</span>` +
-                            '</td>';
-                } else {
-                    html += '<td class="price-cell muted">n/a</td>';
-                }
-
-                html += '</tr>';
-            });
-
-            html += '</tbody></table></div>';
-            container.innerHTML = html;
-        }
 
         function renderRawResults(rawData) {
             const results = document.getElementById('rawResults');
@@ -863,4 +977,5 @@
         }
     </script>
 </body>
+
 </html>

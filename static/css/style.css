@@ -26,7 +26,6 @@
             gap: 20px;
             align-items: flex-start;
             padding: 0 20px;
-            max-width: 1600px;
             margin: 0 auto;
         }
 
@@ -307,7 +306,7 @@
             border-radius: 999px;
             background: #ebf8ff;
             color: #2b6cb0;
-            font-size: 0.78em;
+            font-size: 1em;
         }
 
         .brand-text {
@@ -425,7 +424,7 @@
 
         /* Raw sidebar adjustments */
         .raw-sidebar {
-            width: 320px;
+            /* width: 500px; */
             flex-shrink: 0;
             background: #fff;
             border-radius: 12px;
@@ -433,6 +432,8 @@
             border: none;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
             display: none;
+            max-width: 500px;
+            margin: auto;
             /* Hidden by default until toggled or needed */
         }
 
@@ -448,6 +449,8 @@
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
             padding: 24px;
             display: none;
+            max-width: 1600px;
+            margin: auto;
             /* Hide until we have results */
         }
 

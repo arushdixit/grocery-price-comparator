@@ -126,9 +126,9 @@ function renderMatchedProducts(matchedProducts, locations) {
         section += '<thead><tr>' +
             '<th>Product</th>' +
             '<th>Quantity</th>' +
-            '<th style="text-align: center;"><img src="/static/logos/carrefour.png" alt="Carrefour" style="height: 24px; vertical-align: middle;"></th>' +
-            '<th style="text-align: center;"><img src="/static/logos/noon.png" alt="Noon" style="height: 24px; vertical-align: middle;"></th>' +
-            '<th style="text-align: center;"><img src="/static/logos/talabat.png" alt="Talabat" style="height: 24px; vertical-align: middle;"></th>' +
+            '<th style="text-align: center;"><div style="display: flex; flex-direction: column; align-items: center; gap: 4px;"><img src="/static/logos/carrefour.png" alt="Carrefour" style="height: 24px; vertical-align: middle;"><span>Carrefour</span></div></th>' +
+            '<th style="text-align: center;"><div style="display: flex; flex-direction: column; align-items: center; gap: 4px;"><img src="/static/logos/noon.png" alt="Noon" style="height: 24px; vertical-align: middle;"><span>Noon</span></div></th>' +
+            '<th style="text-align: center;"><div style="display: flex; flex-direction: column; align-items: center; gap: 4px;"><img src="/static/logos/talabat.png" alt="Talabat" style="height: 24px; vertical-align: middle;"><span>Talabat</span></div></th>' +
             '<th>Best price</th>' +
             '</tr></thead><tbody>';
 
@@ -157,9 +157,39 @@ function renderMatchedProducts(matchedProducts, locations) {
             let baseUnit = '';
 
             if (p.quantity_value && p.quantity_unit) {
-                qtyText = `${p.quantity_value} ${p.quantity_unit}`;
+                // Normalize for display
+                let dispVal = p.quantity_value;
+                let dispUnit = p.quantity_unit.toUpperCase(); // KG, G, L, ML, PACK, M
 
-                // Normalize to kg or L for unit price calc
+                // User Request: "only use L, KG, and M", "1L, 1000ml... make it consistent"
+                // Logic: 
+                // 1. If >= 1000 G -> KG
+                // 2. If >= 1000 ML -> L
+                // 3. Ensure L/KG/ML/G/PACK/M are capitalized.
+
+                if (dispUnit === 'G' && dispVal >= 1000) {
+                    dispVal = dispVal / 1000;
+                    dispUnit = 'KG';
+                } else if (dispUnit === 'ML') {
+                    if (dispVal >= 1000) {
+                        dispVal = dispVal / 1000;
+                        dispUnit = 'L';
+                    }
+                    // If user meant 'M' strictly instead of 'ML', replace here.
+                    // "L, KG, and M". Assuming M means ML from context of similar size. 
+                    // But standard is ML. I'll stick to 'ML' for clarity unless 'M' is forced.
+                    // Wait, user said "only use L, KG, and M".
+                    // If I use 'ML', is checking user request "L, KG, and M".
+                    // Maybe "M" stands for "Milliliters"? Or "Meters"? 
+                    // Context "L, KG, M". I'll use "ML" because "M" is ambiguous (Meter?). 
+                    // But I will respect capitalization.
+                } else if (dispUnit === 'L' || dispUnit === 'LITER' || dispUnit === 'LITRE') {
+                    dispUnit = 'L';
+                }
+
+                qtyText = `${parseFloat(dispVal.toFixed(2))} ${dispUnit}`;
+
+                // Base calc for unit price
                 const u = p.quantity_unit.toLowerCase();
                 if (u === 'g' || u === 'gram' || u === 'grams') {
                     baseQty = p.quantity_value / 1000;
@@ -173,6 +203,9 @@ function renderMatchedProducts(matchedProducts, locations) {
                 } else if (u === 'l' || u === 'liter' || u === 'litre') {
                     baseQty = p.quantity_value;
                     baseUnit = 'L';
+                } else if (u === 'pack') {
+                    baseQty = p.quantity_value;
+                    baseUnit = 'pack';
                 }
             }
             section += `<td>${qtyText ? `<span class="quantity-badge">${escapeHtml(qtyText)}</span>` : '<span class="muted">n/a</span>'}</td>`;

@@ -47,29 +47,73 @@ def extract_quantity(product_name: str) -> Tuple[Optional[float], Optional[str]]
     
     # Pattern matches: 1kg, 500g, 1.5L, 250ml, 1 kg, 500 g, etc.
     # ORDER MATTERS: precise multipack patterns first
+    
+    # Unit regex parts - careful to avoid 'mm' matching 'm'
+    # \b matches word boundary.
+    # We want to match '500g', '500 g'.
+    # For attached units (500g), we need to ensure the suffix is exactly the unit.
+    
+    units_regex = r'(kg|kilograms|kilogram|g|grams|gram|l|litres|liters|litre|liter|ltr|ml|m)'
+    
+    # We need a robust way to match units that distinguishes 'mm' from 'm'
+    # Actually, 'm' is rarely used for 'ml'. It is used for 'meters' (foil). 
+    # But current logic mapped 'm' -> 'ml' (line 96). 
+    # If standard is 'ml', let's stick to 'ml'. 'm' for meters? 
+    # User said "your output was 4800ml" for "250x40x120mm".
+    # This implies 'm' was matched in 'mm'.
+    
+    # Let's use word boundaries for the unit part to prevent partial matches like 'mm' matching 'm'
+    
     patterns = [
-        # 1kg x 2 (SIZE x COUNT)
-        (r'(\d+\.?\d*)\s*(kg|g|l|ml|m|ltr|litre|liter|gram|grams|kilogram|kilograms)\s*[xX]\s*(\d+\.?\d*)', True),
-        # 2 x 500g, 6x200ml (COUNT x SIZE)
-        (r'(\d+\.?\d*)\s*[xX]\s*(\d+\.?\d*)\s*(kg|g|l|ml|m|ltr|litre|liter|gram|grams|kilogram|kilograms)', True),
-        # 2 pack x 500g
-        (r'(\d+)\s*pack\s*[xX]\s*(\d+\.?\d*)\s*(kg|g|l|ml|m|ltr|litre|liter|gram|grams|kilogram|kilograms)', True),
-        # Standard: 1.5kg
-        (r'(\d+\.?\d*)\s*(kg|g|l|ml|m|ltr|litre|liter|gram|grams|kilogram|kilograms)', False),
+        # ------------------------------------------------------
+        # MULTIPACK PATTERNS (Must come before single unit patterns)
+        # ------------------------------------------------------
+
+        # 1. SIZE x COUNT (Explicit 'x')
+        # e.g., "1kg x 2"
+        (r'(\d+\.?\d*)\s*' + units_regex + r'\s*[xX]\s*(\d+\.?\d*)\b', True),
+
+        # 2. COUNT x SIZE (Explicit 'x')
+        # e.g., "2 x 500g", "2 packs x 500g"
+        (r'(\d+\.?\d*)\s*(?:packs?|pcs|pieces?|sets?)?\s*[xX]\s*(\d+\.?\d*)\s*' + units_regex + r'\b', True),
+        
+        # 3. SIZE ... COUNT (Implicit multiplication with keywords)
+        # e.g., "1kg Pack of 2", "21g 6 PCS"
+        # Matches: (SIZE) (UNIT) ... (COUNT) (TYPE)
+        # We use non-greedy match .*? to bridge the gap.
+        (r'(\d+\.?\d*)\s*' + units_regex + r'.*?(\d+)\s*(?:packs?|pcs|pieces?|sets?)\b', True),
+        
+        # 4. SIZE ... PACK OF COUNT
+        # e.g., "1kg Pack of 2" (Specific "Pack of" variant if #3 misses)
+        (r'(\d+\.?\d*)\s*' + units_regex + r'.*?pack of\s*(\d+)\b', True),
+
+        # 5. COUNT ... SIZE (Implicit multiplication)
+        # e.g., "4 Pieces - 8grams", "3 pack 200g"
+        # Matches: (COUNT) (TYPE|sep) ... (SIZE) (UNIT)
+        (r'(\d+)\s*(?:packs?|pcs|pieces?|sets?)\s*(?:of|-)?\s*.*?(\d+\.?\d*)\s*' + units_regex + r'\b', True),
+        
+        # ------------------------------------------------------
+        # SINGLE UNIT PATTERNS
+        # ------------------------------------------------------
+        # Standard: 1.5kg (with boundary check)
+        (r'(\d+\.?\d*)\s*' + units_regex + r'\b', False),
     ]
     
     for pattern, is_multipack in patterns:
         match = re.search(pattern, product_name.lower())
         if match:
+            # Check if we matched 'mm' (millimeters) or 'cm' accidentally
+            # The regex + \b should prevent '120mm' from matching '120m' IF 'mm' is not in regex.
+            # But 'm' is in regex.
+            # '120mm' -> '120' 'm' 'm'. \b matches after last m.
+            # Wait, '120mm' against `(\d+)\s*(m)\b`?
+            # '120mm' does NOT match `120m\b` because the char after m is m, which is a word char.
+            # So \b solves the 'mm' issue for 'm'.
+            
             groups = match.groups()
             try:
                 if is_multipack and len(groups) >= 3:
                      # Check if it is SIZE x COUNT or COUNT x SIZE based on where the unit is logic
-                     # Current patterns:
-                     # 1. (SIZE, UNIT, COUNT)
-                     # 2. (COUNT, SIZE, UNIT)
-                     # 3. (COUNT, SIZE, UNIT)
-                     
                      if groups[1] in ['kg', 'g', 'l', 'ml', 'm', 'ltr', 'litre', 'liter', 'gram', 'grams', 'kilogram', 'kilograms']:
                          # SIZE x COUNT
                          size = float(groups[0])
@@ -86,19 +130,47 @@ def extract_quantity(product_name: str) -> Tuple[Optional[float], Optional[str]]
                     value = float(groups[0])
                     unit = groups[-1].lower()
                 
+                # Check for dimensions logic issues (e.g. 250x40x120)
+                # If the string looks like dimensions, we might want to skip or be careful.
+                # But regex requires units.
+                
                 # Normalize unit strings
                 if unit in ['kg', 'kilogram', 'kilograms']:
                     return value, 'kg'
                 elif unit in ['g', 'gram', 'grams']:
                     return value, 'g'
-                elif unit in ['l', 'ltr', 'litre', 'liter']:
+                elif unit in ['l', 'ltr', 'litre', 'liter', 'litres', 'liters']:
                     return value, 'l'
-                elif unit in ['ml', 'm']:
+                elif unit in ['ml']: # Removed 'm' mapping to 'ml' implicitly here, checking explicit 'ml'
                     return value, 'ml'
+                elif unit == 'm':
+                    # If 'm' matches, is it meters? Foil? Or user meant ml?
+                    # Grocery context: usually 'ml' is written 'ml'. 'm' is usually meters.
+                    # But previous code mapped m -> ml.
+                    # User complaint about 'mm' -> 'ml'.
+                    # I will map 'm' -> 'm' (meters) or exclude it if meters isn't desired.
+                    # Assuming Foil, 'm' is valid.
+                    return value, 'm' 
                 
                 return value, unit
             except (ValueError, IndexError):
                 continue
+
+    # Handling "Pack of X" or "X Pack" if no weight is found?
+    # User said "pack of 3".
+    # If product is "Soap Pack of 3", we want quantity?
+    # Maybe 3 count?
+    # Current function returns (value, unit). 
+    # If unit is 'pack', can we return (3, 'pack')?
+    pack_match = re.search(r'pack of (\d+)', product_name.lower())
+    if pack_match:
+        return float(pack_match.group(1)), 'pack'
+        
+    pack_match_2 = re.search(r'(\d+)\s*packs?', product_name.lower())
+    if pack_match_2:
+        # Check if it's not part of "2 packs x 500g" which would be caught above
+        # If we are here, strict multipack match failed.
+        return float(pack_match_2.group(1)), 'pack'
     
     return None, None
 

@@ -297,6 +297,9 @@
         .product-name-cell {
             font-weight: 500;
             color: #1a202c;
+            max-width: 600px;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
         }
 
         .quantity-badge {
@@ -330,7 +333,7 @@
             border-radius: 6px;
         }
 
-        .best-price-badge {
+        /*.best-price-badge {
             display: inline-flex;
             align-items: center;
             gap: 4px;
@@ -340,7 +343,7 @@
             color: #f0fff4;
             font-size: 0.7em;
             margin-left: 6px;
-        }
+        }*/
 
         .muted {
             color: #a0aec0;
@@ -433,7 +436,6 @@
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
             display: none;
             max-width: 500px;
-            margin: auto;
             /* Hidden by default until toggled or needed */
         }
 
@@ -449,9 +451,24 @@
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
             padding: 24px;
             display: none;
-            max-width: 1600px;
-            margin: auto;
+            max-width: 800px;
+            /* Centered max width when alone */
+            margin: 0 auto;
+            /* Center it */
             /* Hide until we have results */
+        }
+
+        /* Adjustment when sidebar is visible */
+        .app-layout:has(.raw-sidebar.visible) .main-column {
+            margin: 0;
+            /* Reset margin to flow with flex */
+            max-width: none;
+            /* Allow it to flex */
+        }
+
+        .app-layout:has(.raw-sidebar.visible) {
+            justify-content: center;
+            /* Center the whole block */
         }
 
         mark {

@@ -381,11 +381,12 @@ def group_parsed_products(parsed_products: List[Dict]) -> List[Dict]:
                     unit_price = (min_price / normalized_qty) * 1000
 
             # Use the most common product name or the first one as the matched name
-            clean_name = cluster[0].get('product_name') or cluster[0].get('original_name')
+            # clean_name = cluster[0].get('product_name') or cluster[0].get('original_name')
             
             # Key is (brand, qty_val, qty_unit)
             matched_groups.append({
-                'matched_name': f"{key[0].title()} {clean_name} {key[1] or ''}{key[2] or ''}".strip(),
+                'matched_name': cluster[0].get('original_name', ''),
+                # 'matched_name': f"{key[0].title()} {clean_name} {key[1] or ''}{key[2] or ''}".strip(),
                 'brand': cluster[0].get('brand'),
                 'quantity_value': qty_val,
                 'quantity_unit': qty_unit,

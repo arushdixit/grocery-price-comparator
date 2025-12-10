@@ -126,10 +126,9 @@ function renderMatchedProducts(matchedProducts, locations) {
         section += '<thead><tr>' +
             '<th>Product</th>' +
             '<th>Quantity</th>' +
-            '<th>Brand</th>' +
-            '<th>Carrefour</th>' +
-            '<th>Noon</th>' +
-            '<th>Talabat</th>' +
+            '<th style="text-align: center;"><img src="/static/logos/carrefour.png" alt="Carrefour" style="height: 24px; vertical-align: middle;"></th>' +
+            '<th style="text-align: center;"><img src="/static/logos/noon.png" alt="Noon" style="height: 24px; vertical-align: middle;"></th>' +
+            '<th style="text-align: center;"><img src="/static/logos/talabat.png" alt="Talabat" style="height: 24px; vertical-align: middle;"></th>' +
             '<th>Best price</th>' +
             '</tr></thead><tbody>';
 
@@ -178,8 +177,7 @@ function renderMatchedProducts(matchedProducts, locations) {
             }
             section += `<td>${qtyText ? `<span class="quantity-badge">${escapeHtml(qtyText)}</span>` : '<span class="muted">n/a</span>'}</td>`;
 
-            // Brand
-            section += `<td>${p.brand ? `<span class="brand-text">${escapeHtml(p.brand)}</span>` : '<span class="muted">n/a</span>'}</td>`;
+
 
             // Store price cells
             ['carrefour', 'noon', 'talabat'].forEach(store => {
@@ -212,7 +210,6 @@ function renderMatchedProducts(matchedProducts, locations) {
                 section += '<td class="price-cell">' +
                     `<div class="price-value">AED ${minPrice.toFixed(2)}</div>` +
                     (bestUnitPrice ? `<div class="unit-price-footnote">${bestUnitPrice}</div>` : '') +
-                    `<div class="best-price-badge" style="margin-top:4px">💰 ${escapeHtml(bestStoreNames.join(', '))}</div>` +
                     '</td>';
             } else {
                 section += '<td class="price-cell muted">n/a</td>';
@@ -486,9 +483,9 @@ function renderRawResults(rawData) {
         } else {
             products.forEach(product => {
                 productsHTML += `
-                            <div class="product-row">
-                                <div class="product-row-name">${highlightQueryMatch(product.name || '')}</div>
-                                <div class="product-row-price">${escapeHtml(product.price || '')}</div>
+                            <div class="product-row" style="display: flex; justify-content: space-between; align-items: baseline; gap: 8px;">
+                                <div class="product-row-name" style="flex: 1;">${highlightQueryMatch(product.name || '')}</div>
+                                <div class="product-row-price" style="white-space: nowrap; font-weight: 600;">${escapeHtml(product.price || '')}</div>
                             </div>
                         `;
             });
@@ -518,8 +515,23 @@ function highlightQueryMatch(text) {
 
     words.forEach(word => {
         // Case insensitive replacement avoiding HTML tags
-        const regex = new RegExp(`(${word})`, 'gi');
-        safeText = safeText.replace(regex, '<mark>$1</mark>');
+        // For strict matching: only highlight if the text contains ALL words.
+        // But highlighting is about visual feedback.
+        // User request: "highlight all the entries that have both the words... highlight only 'masur' or only 'dal' [in those entries]"
+        // But this function processes TEXT, not the entry filtering.
+        // The filtering happens elsewhere? No, this is just for display.
+        // User wants: only highlight words IF the whole query is present in this text?
+        // "if the query is 'masur dal,' then highlight all the entries that have both the words 'masur dal.' Highlight only 'masur' or only 'dal.'"
+        // This likely means: If the text contains both "masur" and "dal", highlight both. If it only contains "masur", highlight NOTHING (implied).
+
+        // Check if text contains ALL words from query
+        const textLower = safeText.toLowerCase();
+        const allPresent = words.every(w => textLower.includes(w.toLowerCase()));
+
+        if (allPresent) {
+            const regex = new RegExp(`(${word})`, 'gi');
+            safeText = safeText.replace(regex, '<mark>$1</mark>');
+        }
     });
 
     return safeText;

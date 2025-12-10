@@ -48,7 +48,9 @@ def extract_quantity(product_name: str) -> Tuple[Optional[float], Optional[str]]
     # Pattern matches: 1kg, 500g, 1.5L, 250ml, 1 kg, 500 g, etc.
     # ORDER MATTERS: precise multipack patterns first
     patterns = [
-        # 2 x 500g, 6x200ml
+        # 1kg x 2 (SIZE x COUNT)
+        (r'(\d+\.?\d*)\s*(kg|g|l|ml|m|ltr|litre|liter|gram|grams|kilogram|kilograms)\s*[xX]\s*(\d+\.?\d*)', True),
+        # 2 x 500g, 6x200ml (COUNT x SIZE)
         (r'(\d+\.?\d*)\s*[xX]\s*(\d+\.?\d*)\s*(kg|g|l|ml|m|ltr|litre|liter|gram|grams|kilogram|kilograms)', True),
         # 2 pack x 500g
         (r'(\d+)\s*pack\s*[xX]\s*(\d+\.?\d*)\s*(kg|g|l|ml|m|ltr|litre|liter|gram|grams|kilogram|kilograms)', True),
@@ -62,11 +64,24 @@ def extract_quantity(product_name: str) -> Tuple[Optional[float], Optional[str]]
             groups = match.groups()
             try:
                 if is_multipack and len(groups) >= 3:
-                     # count * size
-                     count = float(groups[0])
-                     size = float(groups[1])
-                     unit = groups[2].lower()
-                     value = count * size
+                     # Check if it is SIZE x COUNT or COUNT x SIZE based on where the unit is logic
+                     # Current patterns:
+                     # 1. (SIZE, UNIT, COUNT)
+                     # 2. (COUNT, SIZE, UNIT)
+                     # 3. (COUNT, SIZE, UNIT)
+                     
+                     if groups[1] in ['kg', 'g', 'l', 'ml', 'm', 'ltr', 'litre', 'liter', 'gram', 'grams', 'kilogram', 'kilograms']:
+                         # SIZE x COUNT
+                         size = float(groups[0])
+                         unit = groups[1].lower()
+                         count = float(groups[2])
+                         value = size * count
+                     else:
+                         # COUNT x SIZE
+                         count = float(groups[0])
+                         size = float(groups[1])
+                         unit = groups[2].lower()
+                         value = count * size
                 else:
                     value = float(groups[0])
                     unit = groups[-1].lower()
@@ -537,15 +552,12 @@ def sort_products(matched_products: List[Dict], sort_by: str = 'price', ascendin
         Sorted list of products
     """
     if sort_by == 'price':
-        # Sort by lowest available price
-        def get_min_price(product):
-            prices = []
-            for store_data in product.get('stores', {}).values():
-                if store_data and store_data.get('price'):
-                    prices.append(store_data['price'])
-            return min(prices) if prices else float('inf')
+        # Sort by normalized unit price (Best Value)
+        def get_unit_price(product):
+            p = product.get('normalized_unit_price')
+            return p if p is not None else float('inf')
         
-        return sorted(matched_products, key=get_min_price, reverse=not ascending)
+        return sorted(matched_products, key=get_unit_price, reverse=not ascending)
     
     elif sort_by == 'quantity':
         # Sort by normalized quantity
@@ -555,5 +567,9 @@ def sort_products(matched_products: List[Dict], sort_by: str = 'price', ascendin
             return normalize_quantity(value, unit) if value and unit else 0
         
         return sorted(matched_products, key=get_normalized_qty, reverse=not ascending)
+
+    elif sort_by == 'name':
+         # Sort by matched name
+        return sorted(matched_products, key=lambda x: (x.get('matched_name') or '').lower(), reverse=not ascending)
     
     return matched_products

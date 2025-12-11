@@ -141,9 +141,15 @@ def search_carrefour(item):
         products = []
         
         # Find product containers
+        # User provided HTML shows root is div.relative containing the product card
+        # We need a robust selector. The user snippet has `class="relative flex overflow-hidden rounded-xl ..."`
+        # Let's target the anchor tag which seems central: `a` with href containing `/p/` usually?
+        # Or `div` with `rounded-xl border-solid bg-white`.
+        
+        # Find product containers - Reverting to broader selector
         product_containers = soup.find_all('div', class_=lambda x: x and 'max-w-' in str(x) and 'sm:max-w-' in str(x))
         
-        for container in product_containers[:60]:
+        for container in product_containers[:40]: # Increased limit to ensure we hit results
             try:
                 # Find the link with product name (skip labels like "Bestseller")
                 link = container.find('a', href=True)
@@ -184,9 +190,30 @@ def search_carrefour(item):
                                 price_text += decimal.text.strip()
                         price_text += " AED"
                         
+                        # Extract Image
+                        image_url = None
+                        try:
+                            # User provided specific class: rounded-lg object-contain
+                            img_elem = container.find('img', class_=lambda x: x and 'rounded-lg' in x and 'object-contain' in x)
+                            if not img_elem:
+                                # Fallback to generic
+                                img_elem = container.find('img')
+                            
+                            if img_elem:
+                                image_url = img_elem.get('src') or img_elem.get('data-src')
+                        except:
+                            pass
+
+                        # Extract Product URL
+                        product_url = None
+                        if link.get('href'):
+                            product_url = "https://www.carrefouruae.com" + link.get('href')
+
                         products.append({
                             'name': name,
-                            'price': price_text
+                            'price': price_text,
+                            'image_url': image_url,
+                            'product_url': product_url
                         })
             except Exception:
                 continue
@@ -241,31 +268,55 @@ def search_noon(item):
         soup = BeautifulSoup(driver.page_source, 'html.parser')
         products = []
         
-        # Find product boxes
-        product_boxes = soup.find_all('div', class_=lambda x: x and 'ProductBox_detailsSection' in x)
+        # Find single product items directly
+        # User HTML: <a class="ProductBox_wrapper__LfrFV" href="...">
+        product_boxes = soup.find_all('a', class_=lambda x: x and 'ProductBox_wrapper' in x)
         
-        for product in product_boxes[:60]:  # Limit to 60 results
+        for product in product_boxes[:20]:
             try:
+                # 1. Product URL (The element itself is the anchor)
+                product_url = None
+                href = product.get('href')
+                if href:
+                     product_url = f"https://minutes.noon.com{href}" if href.startswith('/') else href
+
+                # 2. Image
+                image_url = None
+                # HTML: <div class="ProductBox_imageSection__e0hHc"><img ...>
+                img_section = product.find('div', class_=lambda x: x and 'ProductBox_imageSection' in x)
+                if img_section:
+                    img_elem = img_section.find('img')
+                    if img_elem:
+                        image_url = img_elem.get('src')
+                
+                # 3. Details (Name, Price, Size)
+                # HTML: <div class="ProductBox_detailsSection__gmA8X">...
+                details = product.find('div', class_=lambda x: x and 'ProductBox_detailsSection' in x)
+                if not details:
+                    continue
+
                 name_elem = product.find('h2', class_=lambda x: x and 'ProductBox_title' in x)
+                # Fallback if h2 not found (sometimes it's just a div)
+                if not name_elem:
+                    name_elem = product.find('div', class_=lambda x: x and 'ProductBox_title' in x)
+                    
                 price_elem = product.find('strong', class_=lambda x: x and 'Price_productPrice' in x)
+                # Ensure price is within THIS product (scoped find should guarantee this)
+                
                 size_elem = product.find('span', class_=lambda x: x and 'ProductBox_sizeInfo' in x)
-                origin_elem = product.find('span', class_=lambda x: x and 'TaggedAttributes_attribute' in x)
+                # Origin might be elsewhere or strictly in details? User didn't enable origin in snippet.
                 
                 if name_elem and price_elem:
                     name = name_elem.text.strip()
                     
-                    # Add size info if available
                     if size_elem:
                         name += f" - {size_elem.text.strip()}"
                     
-                    # Add origin info if available
-                    if origin_elem:
-                        origin = origin_elem.text.strip()
-                        name += f" ({origin})"
-                    
                     products.append({
                         'name': name,
-                        'price': f"AED {price_elem.text.strip()}"
+                        'price': f"AED {price_elem.text.strip()}",
+                        'image_url': image_url,
+                        'product_url': product_url
                     })
             except:
                 continue
@@ -297,7 +348,7 @@ def search_talabat(item):
         params = {
             'countryId': '4',  # UAE
             'query': item,
-            'limit': '60',
+            'limit': '20',
             'offset': '0',
             'isDarkstore': 'true',
             'isMigrated': 'false',
@@ -321,9 +372,27 @@ def search_talabat(item):
                     price = product.get('price')
                     
                     if title and price is not None:
+                        # Extract Image
+                        image_url = None
+                        if product.get('images') and len(product.get('images')) > 0:
+                            image_url = product.get('images')[0]
+                        elif product.get('image'):
+                             image_url = product.get('image')
+
+                        # Extract Product URL
+                        # Pattern: https://www.talabat.com/uae/grocery/673755/talabat-mart-palm-jumeirah/product/<slug>/s/<sku>?aid=1308
+                        slug = product.get('slug')
+                        sku = product.get('sku')
+                        
+                        product_url = None
+                        if slug and sku:
+                             product_url = f"https://www.talabat.com/uae/grocery/673755/talabat-mart-palm-jumeirah/product/{slug}/s/{sku}?aid=1308"
+                        
                         products.append({
                             'name': title,
-                            'price': f"AED {price}"
+                            'price': f"AED {price}",
+                            'image_url': image_url,
+                            'product_url': product_url # Likely None for API
                         })
                 except:
                     continue

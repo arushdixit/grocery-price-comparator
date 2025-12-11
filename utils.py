@@ -53,7 +53,7 @@ def extract_quantity(product_name: str) -> Tuple[Optional[float], Optional[str]]
     # We want to match '500g', '500 g'.
     # For attached units (500g), we need to ensure the suffix is exactly the unit.
     
-    units_regex = r'(kg|kilograms|kilogram|g|grams|gram|l|litres|liters|litre|liter|ltr|ml|m)'
+    units_regex = r'(kg|kilograms|kilogram|g|grams|gram|l|litres|liters|litre|liter|ltr|ml|pcs|pieces|piece|pc|packs|pack|pck|m)'
     
     # We need a robust way to match units that distinguishes 'mm' from 'm'
     # Actually, 'm' is rarely used for 'ml'. It is used for 'meters' (foil). 
@@ -102,6 +102,11 @@ def extract_quantity(product_name: str) -> Tuple[Optional[float], Optional[str]]
     for pattern, is_multipack in patterns:
         match = re.search(pattern, product_name.lower())
         if match:
+            # Fix for "Approx 4 pieces": If 'approx' is in the name, treat as single unit
+            # "Seed Potato - 750g - Approx 4 pieces per KG" -> Should be 750g, not 3kg (750*4)
+            if is_multipack and 'approx' in product_name.lower():
+                continue
+
             # Check if we matched 'mm' (millimeters) or 'cm' accidentally
             # The regex + \b should prevent '120mm' from matching '120m' IF 'mm' is not in regex.
             # But 'm' is in regex.
@@ -143,15 +148,8 @@ def extract_quantity(product_name: str) -> Tuple[Optional[float], Optional[str]]
                     return value, 'l'
                 elif unit in ['ml']: # Removed 'm' mapping to 'ml' implicitly here, checking explicit 'ml'
                     return value, 'ml'
-                elif unit == 'm':
-                    # If 'm' matches, is it meters? Foil? Or user meant ml?
-                    # Grocery context: usually 'ml' is written 'ml'. 'm' is usually meters.
-                    # But previous code mapped m -> ml.
-                    # User complaint about 'mm' -> 'ml'.
-                    # I will map 'm' -> 'm' (meters) or exclude it if meters isn't desired.
-                    # Assuming Foil, 'm' is valid.
-                    return value, 'm' 
-                
+                elif unit in ['pcs', 'piece', 'pieces', 'pc', 'pck', 'pack', 'packs']:
+                    return value, 'pcs'
                 return value, unit
             except (ValueError, IndexError):
                 continue
@@ -192,15 +190,15 @@ def normalize_quantity(value: float, unit: str) -> float:
     
     # Weight normalization to grams
     if unit == 'kg':
-        return value * 1000
-    elif unit == 'g':
         return value
+    elif unit == 'g':
+        return value/1000
     
     # Volume normalization to milliliters
     elif unit in ['l', 'ltr', 'litre', 'liter']:
-        return value * 1000
-    elif unit == 'ml':
         return value
+    elif unit == 'ml':
+        return value/1000
     
     return value
 
@@ -341,6 +339,8 @@ def parse_products_regex(products: List[Dict], store_name: str) -> List[Dict]:
             'quantity_value': qty_val,
             'quantity_unit': qty_unit,
             'price': product.get('price'),
+            'image_url': product.get('image_url'),
+            'product_url': product.get('product_url'),
             'store': store_name
         })
             
@@ -436,8 +436,16 @@ def group_parsed_products(parsed_products: List[Dict]) -> List[Dict]:
                         
                         stores_dict[store] = {
                             'name': prod.get('original_name', ''),
-                            'price': current_price
+                            'price': current_price,
+                            'product_url': prod.get('product_url')
                         }
+            
+            # Select primary image for the group (first available)
+            primary_image = None
+            for prod in cluster:
+                if prod.get('image_url'):
+                    primary_image = prod.get('image_url')
+                    break
             
             # Calculate normalized unit price (Price per base unit)
             normalized_qty = 0
@@ -450,7 +458,7 @@ def group_parsed_products(parsed_products: List[Dict]) -> List[Dict]:
                 normalized_qty = normalize_quantity(qty_val, qty_unit)
                 if normalized_qty > 0 and min_price != float('inf'):
                     # Calculate price per kg or per L (normalized_qty is in g or ml)
-                    unit_price = (min_price / normalized_qty) * 1000
+                    unit_price = (min_price / normalized_qty)
 
             # Use the most common product name or the first one as the matched name
             # clean_name = cluster[0].get('product_name') or cluster[0].get('original_name')
@@ -460,6 +468,7 @@ def group_parsed_products(parsed_products: List[Dict]) -> List[Dict]:
                 'matched_name': cluster[0].get('original_name', ''),
                 # 'matched_name': f"{key[0].title()} {clean_name} {key[1] or ''}{key[2] or ''}".strip(),
                 'brand': cluster[0].get('brand'),
+                'primary_image': primary_image,
                 'quantity_value': qty_val,
                 'quantity_unit': qty_unit,
                 'normalized_unit_price': unit_price,

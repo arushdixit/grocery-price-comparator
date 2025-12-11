@@ -302,6 +302,37 @@
             overflow-wrap: break-word;
         }
 
+        .product-thumb {
+            width: 40px;
+            height: 40px;
+            object-fit: contain;
+            border-radius: 6px;
+            border: 1px solid #eee;
+            background: white;
+            flex-shrink: 0;
+        }
+
+        .price-link {
+            text-decoration: none;
+            color: inherit;
+            transition: color 0.2s;
+        }
+
+        .price-link:hover {
+            text-decoration: underline;
+            color: #2b6cb0;
+        }
+
+        .raw-link {
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .raw-link:hover {
+            text-decoration: underline;
+            color: #4a5568;
+        }
+
         .quantity-badge {
             display: inline-flex;
             align-items: center;

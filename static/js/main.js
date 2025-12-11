@@ -1,5 +1,3 @@
-// ... existing script ...
-
 function toggleRawResults() {
     const section = document.getElementById('rawSection');
     const btn = document.getElementById('toggleRawBtn');
@@ -148,8 +146,18 @@ function renderMatchedProducts(matchedProducts, locations) {
 
             section += '<tr>';
 
-            // Product name
-            section += `<td class="product-name-cell">${escapeHtml(p.matched_name || '')}</td>`;
+            // Product name + Image
+            let imgHtml = '';
+            if (p.primary_image) {
+                imgHtml = `<img src="${escapeHtml(p.primary_image)}" class="product-thumb" alt="img" onerror="this.style.display='none'"> `;
+            }
+
+            section += `<td class="product-name-cell">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    ${imgHtml}
+                    <span>${escapeHtml(p.matched_name || '')}</span>
+                </div>
+            </td>`;
 
             // Quantity
             let qtyText = '';
@@ -203,10 +211,11 @@ function renderMatchedProducts(matchedProducts, locations) {
                 } else if (u === 'l' || u === 'liter' || u === 'litre') {
                     baseQty = p.quantity_value;
                     baseUnit = 'L';
-                } else if (u === 'pack') {
+                } else if (['pack', 'packs', 'pcs', 'piece', 'pieces', 'pc'].includes(u)) {
                     baseQty = p.quantity_value;
-                    baseUnit = 'pack';
+                    baseUnit = 'pc';
                 }
+                //console.log(baseQty, baseUnit);
             }
             section += `<td>${qtyText ? `<span class="quantity-badge">${escapeHtml(qtyText)}</span>` : '<span class="muted">n/a</span>'}</td>`;
 
@@ -222,8 +231,14 @@ function renderMatchedProducts(matchedProducts, locations) {
                         unitPrice = `(AED ${(info.price / baseQty).toFixed(2)} / ${baseUnit})`;
                     }
 
+                    // Clickable Price
+                    let priceHtml = `<div class="price-value">AED ${info.price.toFixed(2)}</div>`;
+                    if (stores[store].product_url) {
+                        priceHtml = `<a href="${escapeHtml(stores[store].product_url)}" target="_blank" class="price-link">${priceHtml}</a>`;
+                    }
+
                     section += `<td class="price-cell${isBest ? ' best-price' : ''}">` +
-                        `<div class="price-value">AED ${info.price.toFixed(2)}</div>` +
+                        priceHtml +
                         (unitPrice ? `<div class="unit-price-footnote">${unitPrice}</div>` : '') +
                         '</td>';
                 } else {
@@ -239,7 +254,7 @@ function renderMatchedProducts(matchedProducts, locations) {
                 if (baseQty > 0) {
                     bestUnitPrice = `(AED ${(minPrice / baseQty).toFixed(2)} / ${baseUnit})`;
                 }
-
+                console.log(bestUnitPrice, minPrice, baseQty, baseUnit);
                 section += '<td class="price-cell">' +
                     `<div class="price-value">AED ${minPrice.toFixed(2)}</div>` +
                     (bestUnitPrice ? `<div class="unit-price-footnote">${bestUnitPrice}</div>` : '') +
@@ -515,9 +530,22 @@ function renderRawResults(rawData) {
             productsHTML = '<div class="no-results">No results found</div>';
         } else {
             products.forEach(product => {
+                let imgCode = '';
+                if (product.image_url) {
+                    imgCode = `<img src="${escapeHtml(product.image_url)}" class="product-thumb-small" style="width: 30px; height: 30px; object-fit: contain; border-radius: 4px;">`;
+                }
+
+                let nameCode = highlightQueryMatch(product.name || '');
+                if (product.product_url) {
+                    nameCode = `<a href="${escapeHtml(product.product_url)}" target="_blank" class="raw-link">${nameCode}</a>`;
+                }
+
                 productsHTML += `
                             <div class="product-row" style="display: flex; justify-content: space-between; align-items: baseline; gap: 8px;">
-                                <div class="product-row-name" style="flex: 1;">${highlightQueryMatch(product.name || '')}</div>
+                                <div class="product-row-name" style="flex: 1; display: flex; align-items: center; gap: 6px;">
+                                    ${imgCode}
+                                    <span>${nameCode}</span>
+                                </div>
                                 <div class="product-row-price" style="white-space: nowrap; font-weight: 600;">${escapeHtml(product.price || '')}</div>
                             </div>
                         `;

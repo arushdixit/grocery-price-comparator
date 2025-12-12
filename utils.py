@@ -22,7 +22,6 @@ def parse_price(price_str: str) -> Optional[float]:
     try:
         # Remove currency symbols and extract numbers
         # Matches patterns like: "12.50", "AED 12.50", "12,50", "1,200.50"
-        # Fix: Remove commas before regex to avoid treating "1,200" as "1.200" or breaking regex
         clean_str = str(price_str).replace(',', '')
         match = re.search(r'(\d+\.?\d*|\d+)', clean_str)
         if match:
@@ -48,22 +47,8 @@ def extract_quantity(product_name: str) -> Tuple[Optional[float], Optional[str]]
     # Pattern matches: 1kg, 500g, 1.5L, 250ml, 1 kg, 500 g, etc.
     # ORDER MATTERS: precise multipack patterns first
     
-    # Unit regex parts - careful to avoid 'mm' matching 'm'
-    # \b matches word boundary.
-    # We want to match '500g', '500 g'.
-    # For attached units (500g), we need to ensure the suffix is exactly the unit.
-    
     units_regex = r'(kg|kilograms|kilogram|g|grams|gram|l|litres|liters|litre|liter|ltr|ml|pcs|pieces|piece|pc|packs|pack|pck|m|sqft|sq\.ft|sq\s*ft)\b'
-    
-    # We need a robust way to match units that distinguishes 'mm' from 'm'
-    # Actually, 'm' is rarely used for 'ml'. It is used for 'meters' (foil). 
-    # But current logic mapped 'm' -> 'ml' (line 96). 
-    # If standard is 'ml', let's stick to 'ml'. 'm' for meters? 
-    # User said "your output was 4800ml" for "250x40x120mm".
-    # This implies 'm' was matched in 'mm'.
-    
-    # Let's use word boundaries for the unit part to prevent partial matches like 'mm' matching 'm'
-    
+        
     patterns = [
         # ------------------------------------------------------
         # MULTIPACK PATTERNS (Must come before single unit patterns)
@@ -107,14 +92,6 @@ def extract_quantity(product_name: str) -> Tuple[Optional[float], Optional[str]]
             if is_multipack and 'approx' in product_name.lower():
                 continue
 
-            # Check if we matched 'mm' (millimeters) or 'cm' accidentally
-            # The regex + \b should prevent '120mm' from matching '120m' IF 'mm' is not in regex.
-            # But 'm' is in regex.
-            # '120mm' -> '120' 'm' 'm'. \b matches after last m.
-            # Wait, '120mm' against `(\d+)\s*(m)\b`?
-            # '120mm' does NOT match `120m\b` because the char after m is m, which is a word char.
-            # So \b solves the 'mm' issue for 'm'.
-            
             groups = match.groups()
             try:
                 if is_multipack and len(groups) >= 3:
@@ -134,11 +111,7 @@ def extract_quantity(product_name: str) -> Tuple[Optional[float], Optional[str]]
                 else:
                     value = float(groups[0])
                     unit = groups[-1].lower()
-                
-                # Check for dimensions logic issues (e.g. 250x40x120)
-                # If the string looks like dimensions, we might want to skip or be careful.
-                # But regex requires units.
-                
+                                
                 # Normalize unit strings
                 if unit in ['kg', 'kilogram', 'kilograms']:
                     return value, 'kg'
@@ -187,102 +160,6 @@ def normalize_quantity(value: float, unit: str) -> float:
         return value/1000
     
     return value
-
-def parse_products_ai(products: List[Dict], store_name: str, openrouter_api_key: str) -> List[Dict]:
-    """
-    Step 1: Parse individual products to extract structured data (AI Version)
-    
-    Args:
-        products: List of products from a single store
-        store_name: Name of the store
-        openrouter_api_key: OpenRouter API key
-    
-    Returns:
-        List of parsed products with extracted brand, name, quantity
-    """
-    if not products or not openrouter_api_key:
-        return []
-    
-    try:
-        # Limit to first 20 products to avoid token limits
-        products_subset = products[:20]
-        
-        prompt = f"""Extract structured information from these grocery product names.
-
-        For each product, identify:
-        1. Brand name (e.g., "Bayara", "Nestle", "Almarai")
-        2. Product name (e.g., "Moong Dal", "Milk", "Basmati Rice")
-        3. Quantity value and unit (e.g., 1, "kg" or 500, "ml")
-
-        Products from {store_name}:
-        {json.dumps([p['name'] for p in products_subset], ensure_ascii=False)}
-
-        Return JSON only (no other text):
-        {{
-        "parsed": [
-            {{
-            "original_name": "exact name from input",
-            "brand": "Brand Name" or null,
-            "product_name": "Product Name",
-            "quantity_value": 1.0 or null,
-            "quantity_unit": "kg" or null
-            }}
-        ]
-        }}"""
-
-        model = os.getenv('OPENROUTER_MODEL', 'meta-llama/llama-3.1-8b-instruct:free')
-        
-        response = requests.post(
-            url="https://openrouter.ai/api/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {openrouter_api_key}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "model": model,
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.1,
-                "reasoning": {
-                    "effort": 'low'
-                },
-                "max_output_tokens": 2000,
-            }
-        )
-        
-        if response.status_code == 200:
-            result = response.json()
-            content = result['choices'][0]['message']['content']
-            
-            json_match = re.search(r'```(?:json)?\s*(.*?)\s*```', content, re.DOTALL)
-            if json_match:
-                content = json_match.group(1)
-            
-            parsed_data = json.loads(content)
-            parsed_list = parsed_data.get('parsed', [])
-            
-            # Match back with original products to preserve price
-            result_products = []
-            for i, parsed in enumerate(parsed_list):
-                if i < len(products_subset):
-                    result_products.append({
-                        'original_name': parsed.get('original_name', products_subset[i]['name']),
-                        'brand': parsed.get('brand'),
-                        'product_name': parsed.get('product_name'),
-                        'quantity_value': parsed.get('quantity_value'),
-                        'quantity_unit': parsed.get('quantity_unit'),
-                        'price': products_subset[i].get('price'),
-                        'store': store_name
-                    })
-            
-            print(f"[AI Parse] {store_name} Parsed {len(result_products)} products")
-            return result_products
-        else:
-            print(f"[AI Parse] {store_name} API error: {response.status_code}")
-            return []
-            
-    except Exception as e:
-        print(f"[AI Parse] {store_name} Error: {str(e)}")
-        return []
 
 def parse_products_regex(products: List[Dict], store_name: str) -> List[Dict]:
     """
@@ -335,7 +212,6 @@ def parse_products_regex(products: List[Dict], store_name: str) -> List[Dict]:
         })
             
     return result_products
-
 
 def group_parsed_products(parsed_products: List[Dict]) -> List[Dict]:
     """
@@ -467,7 +343,6 @@ def group_parsed_products(parsed_products: List[Dict]) -> List[Dict]:
 
     return matched_groups
 
-
 def match_products(store_results: Dict[str, Dict], openrouter_api_key: str, query: str = None) -> List[Dict]:
     """
     Two-step product matching:
@@ -545,6 +420,102 @@ def match_products(store_results: Dict[str, Dict], openrouter_api_key: str, quer
             
     except Exception as e:
         print(f"[Matcher] Error: {str(e)}")
+        return []
+
+def parse_products_ai(products: List[Dict], store_name: str, openrouter_api_key: str) -> List[Dict]:
+    """
+    Step 1: Parse individual products to extract structured data (AI Version)
+    
+    Args:
+        products: List of products from a single store
+        store_name: Name of the store
+        openrouter_api_key: OpenRouter API key
+    
+    Returns:
+        List of parsed products with extracted brand, name, quantity
+    """
+    if not products or not openrouter_api_key:
+        return []
+    
+    try:
+        # Limit to first 20 products to avoid token limits
+        products_subset = products[:20]
+        
+        prompt = f"""Extract structured information from these grocery product names.
+
+        For each product, identify:
+        1. Brand name (e.g., "Bayara", "Nestle", "Almarai")
+        2. Product name (e.g., "Moong Dal", "Milk", "Basmati Rice")
+        3. Quantity value and unit (e.g., 1, "kg" or 500, "ml")
+
+        Products from {store_name}:
+        {json.dumps([p['name'] for p in products_subset], ensure_ascii=False)}
+
+        Return JSON only (no other text):
+        {{
+        "parsed": [
+            {{
+            "original_name": "exact name from input",
+            "brand": "Brand Name" or null,
+            "product_name": "Product Name",
+            "quantity_value": 1.0 or null,
+            "quantity_unit": "kg" or null
+            }}
+        ]
+        }}"""
+
+        model = os.getenv('OPENROUTER_MODEL', 'meta-llama/llama-3.1-8b-instruct:free')
+        
+        response = requests.post(
+            url="https://openrouter.ai/api/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {openrouter_api_key}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": model,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.1,
+                "reasoning": {
+                    "effort": 'low'
+                },
+                "max_output_tokens": 2000,
+            }
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            content = result['choices'][0]['message']['content']
+            
+            json_match = re.search(r'```(?:json)?\s*(.*?)\s*```', content, re.DOTALL)
+            if json_match:
+                content = json_match.group(1)
+            
+            parsed_data = json.loads(content)
+            parsed_list = parsed_data.get('parsed', [])
+            
+            # Match back with original products to preserve price
+            result_products = []
+            for i, parsed in enumerate(parsed_list):
+                if i < len(products_subset):
+                    result_products.append({
+                        'original_name': parsed.get('original_name', products_subset[i]['name']),
+                        'brand': parsed.get('brand'),
+                        'product_name': parsed.get('product_name'),
+                        'quantity_value': parsed.get('quantity_value'),
+                        'quantity_unit': parsed.get('quantity_unit'),
+                        'price': products_subset[i].get('price'),
+                        'store': store_name
+                    })
+            
+            print(f"[AI Parse] {store_name} Parsed {len(result_products)} products")
+            return result_products
+        else:
+            print(f"[AI Parse] {store_name} API error: {response.status_code}")
+            return []
+            
+    except Exception as e:
+        print(f"[AI Parse] {store_name} Error: {str(e)}")
         return []
 
 def fallback_matching(store_results: Dict[str, Dict]) -> List[Dict]:

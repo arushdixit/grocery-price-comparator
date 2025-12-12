@@ -241,7 +241,9 @@ def search_noon(item):
     location = None
     try:
         # Get or create persistent browser
+        print("[Noon] Getting browser...")
         driver, is_new = get_or_create_browser('Noon', 'https://minutes.noon.com/uae-en/', NOON_COOKIES_FILE)
+        print(f"[Noon] Browser ready (new={is_new})")
         
         # Detect location only on first load
         if is_new:
@@ -255,22 +257,37 @@ def search_noon(item):
         
         # Navigate to search URL
         url = f"https://minutes.noon.com/uae-en/search/?q={item.replace(' ', '%20')}"
+        print(f"[Noon] Navigating to {url}")
         driver.get(url)
         
         # Wait for products to load (wait for product boxes)
-        wait = WebDriverWait(driver, 10)
-        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "div[class*='ProductBox_detailsSection']")))
+        print("[Noon] Waiting for product elements...")
+        wait = WebDriverWait(driver, 15) # Increased timeout
+        try:
+            wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".ProductBox-module-scss-module__urFZAa__imageSection")))
+            print("[Noon] Product elements detected")
+        except Exception as e:
+            print(f"[Noon] Timeout waiting for products: {str(e)}")
+            # debug - save screenshot
+            driver.save_screenshot('noon_debug.png')
+            print("[Noon] Saved debug screenshot to noon_debug.png")
+            with open('noon_debug.html', 'w') as f:
+                f.write(driver.page_source)
+            print("[Noon] Saved debug HTML to noon_debug.html")
+
         
         # Additional wait for dynamic content
-        time.sleep(1)
+        time.sleep(2)
         
         # Parse with BeautifulSoup
         soup = BeautifulSoup(driver.page_source, 'html.parser')
         products = []
         
         # Find single product items directly
-        # User HTML: <a class="ProductBox_wrapper__LfrFV" href="...">
-        product_boxes = soup.find_all('a', class_=lambda x: x and 'ProductBox_wrapper' in x)
+        # User HTML: <a class="ProductBox-module-scss-module__urFZAa__wrapper" ...>
+        # We search for 'ProductBox' generally to be robust against hash changes
+        product_boxes = soup.find_all('a', class_=lambda x: x and 'ProductBox' in str(x))
+        print(f"[Noon] Found {len(product_boxes)} product boxes in DOM")
         
         for product in product_boxes[:20]:
             try:
@@ -282,29 +299,25 @@ def search_noon(item):
 
                 # 2. Image
                 image_url = None
-                # HTML: <div class="ProductBox_imageSection__e0hHc"><img ...>
-                img_section = product.find('div', class_=lambda x: x and 'ProductBox_imageSection' in x)
+                # HTML: <div class="ProductBox-module-scss-module__urFZAa__imageSection"><img ...>
+                img_section = product.find('div', class_=lambda x: x and 'imageSection' in str(x))
                 if img_section:
                     img_elem = img_section.find('img')
                     if img_elem:
                         image_url = img_elem.get('src')
                 
                 # 3. Details (Name, Price, Size)
-                # HTML: <div class="ProductBox_detailsSection__gmA8X">...
-                details = product.find('div', class_=lambda x: x and 'ProductBox_detailsSection' in x)
+                # HTML: <div class="ProductBox-module-scss-module__urFZAa__detailsSection">...
+                details = product.find('div', class_=lambda x: x and 'detailsSection' in str(x))
                 if not details:
                     continue
 
-                name_elem = product.find('h2', class_=lambda x: x and 'ProductBox_title' in x)
-                # Fallback if h2 not found (sometimes it's just a div)
-                if not name_elem:
-                    name_elem = product.find('div', class_=lambda x: x and 'ProductBox_title' in x)
-                    
-                price_elem = product.find('strong', class_=lambda x: x and 'Price_productPrice' in x)
-                # Ensure price is within THIS product (scoped find should guarantee this)
+                name_elem = product.find('h2', class_=lambda x: x and 'title' in str(x))
+
+                # Price is usually in a container like priceCtr
+                price_elem = product.find('strong', class_=lambda x: x and 'productPrice' in str(x))
                 
-                size_elem = product.find('span', class_=lambda x: x and 'ProductBox_sizeInfo' in x)
-                # Origin might be elsewhere or strictly in details? User didn't enable origin in snippet.
+                size_elem = product.find('span', class_=lambda x: x and 'sizeInfo' in str(x))
                 
                 if name_elem and price_elem:
                     name = name_elem.text.strip()
@@ -312,9 +325,12 @@ def search_noon(item):
                     if size_elem:
                         name += f" - {size_elem.text.strip()}"
                     
+                    # Clean price text (remove currency if present to avoid dupes)
+                    price_text = price_elem.text.strip().replace('AED', '').strip()
+                    
                     products.append({
                         'name': name,
-                        'price': f"AED {price_elem.text.strip()}",
+                        'price': f"AED {price_text}",
                         'image_url': image_url,
                         'product_url': product_url
                     })
@@ -323,6 +339,12 @@ def search_noon(item):
         
         elapsed = time.time() - start_time
         print(f"[Noon] Completed in {elapsed:.2f}s - Found {len(products)} products")
+        if len(products) == 0:
+             print("[Noon] WARNING: 0 products found. Check selectors.")
+             driver.save_screenshot('noon_zero_results.png')
+             with open('noon_zero_results.html', 'w') as f:
+                f.write(driver.page_source)
+
         _search_status['noon'] = 'complete'
         result = {'products': products if products else [{'name': 'No results found', 'price': 'N/A'}]}
         if location:
@@ -332,6 +354,8 @@ def search_noon(item):
     except Exception as e:
         elapsed = time.time() - start_time
         print(f"[Noon] Error in {elapsed:.2f}s - {str(e)}")
+        import traceback
+        traceback.print_exc()
         _search_status['noon'] = 'complete'
         return {'products': [{'name': f'Error: {str(e)}', 'price': 'N/A'}]}
 

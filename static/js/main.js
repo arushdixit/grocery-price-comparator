@@ -2,12 +2,12 @@ function toggleRawResults() {
     const section = document.getElementById('rawSection');
     const btn = document.getElementById('toggleRawBtn');
 
-    if (section.classList.contains('visible')) {
-        section.classList.remove('visible');
-        btn.textContent = 'Show Raw Results Sidebar ➡️';
-    } else {
-        section.classList.add('visible');
+    if (section.classList.contains('hidden')) {
+        section.classList.remove('hidden');
         btn.textContent = 'Hide Sidebar ⬅️';
+    } else {
+        section.classList.add('hidden');
+        btn.textContent = 'Show Raw Results Sidebar ➡️';
     }
 }
 
@@ -65,7 +65,7 @@ function renderMatchedProducts(matchedProducts, locations) {
     container._locations = locations;
 
     if (!matchedProducts || matchedProducts.length === 0) {
-        container.innerHTML = '<div class="no-matches">No exact SKU matches across stores yet. Try a more specific query like "bayara moong dal 1kg".</div>';
+        container.innerHTML = '<div class="text-center text-text-muted py-8">No exact SKU matches across stores yet. Try a more specific query like "bayara moong dal 1kg".</div>';
         return;
     }
 
@@ -81,55 +81,40 @@ function renderMatchedProducts(matchedProducts, locations) {
     // --- Helper to build table ---
     const buildTable = (products, title, isOtherMatches = false) => {
         if (products.length === 0 && !isOtherMatches) return ''; // Skip empty strict
-
         let section = '';
-
         // Add filter buttons only for Other Matches
         if (isOtherMatches) {
-            section += `<div class="section-header" style="margin-top: 24px;"><div class="section-title">${title}</div></div>`;
-
+            section += `<div class="mt-6 mb-4"><h3 class="text-xl font-bold text-text-primary">${title}</h3></div>`;
             // Generate buttons from query
             const query = document.getElementById('searchInput').value.trim();
             if (query) {
-                const words = query.split(/\s+/).filter(w => w.length > 2); // Only words > 2 chars
+                const words = query.split(/\\s+/).filter(w => w.length > 2); // Only words > 2 chars
                 if (words.length > 0) {
-                    section += `<div class="filter-container"><span class="filter-label">Filter matches by:</span><div class="filter-buttons">`;
+                    section += `<div class="flex flex-wrap items-center gap-2 mb-4"><span class="text-sm text-text-muted font-medium">Filter matches by:</span><div class="flex flex-wrap gap-2">`;
                     words.forEach(word => {
                         // Check if this word is active
                         const isActive = activeFilterWord === word ? 'active' : '';
-                        section += `<button class="filter-btn ${isActive}" onclick="filterMatches('${escapeHtml(word)}', this)">${escapeHtml(word)}</button>`;
+                        section += `<button class="px-3 py-1 text-sm rounded-full border transition-all ${isActive ? 'bg-primary text-white border-primary' : 'bg-white text-text-primary border-border hover:border-primary'}" onclick="filterMatches('${escapeHtml(word)}', this)">${escapeHtml(word)}</button>`;
                     });
                     section += `</div></div>`;
                 }
             }
-
             section += '<div id="otherMatchesContainer">'; // Container for filtered rows
         } else {
-            section += `<div class="section-header"><div class="section-title">${title}</div></div>`;
+            section += `<div class="mb-4"><h3 class="text-xl font-bold text-text-primary">${title}</h3></div>`;
         }
-
         // If filtering is active for "other matches", use filtered list
         let displayProducts = products;
         if (isOtherMatches && activeFilterWord) {
             const term = activeFilterWord.toLowerCase();
             displayProducts = products.filter(p => (p.matched_name || '').toLowerCase().includes(term));
         }
-
         if (displayProducts.length === 0) {
-            if (isOtherMatches) return section + '<div class="no-matches">No matches containing "' + escapeHtml(activeFilterWord) + '"</div></div>';
+            if (isOtherMatches) return section + '<div class="text-center text-text-muted py-8">No matches containing "' + escapeHtml(activeFilterWord) + '"</div></div>';
             return '';
         }
-
-        section += '<div class="comparison-table-wrapper"><table class="comparison-table">';
-        section += '<thead><tr>' +
-            '<th>Product</th>' +
-            '<th>Quantity</th>' +
-            '<th style="text-align: center;"><div style="display: flex; flex-direction: column; align-items: center; gap: 4px;"><img src="/static/logos/carrefour.png" alt="Carrefour" style="height: 24px; vertical-align: middle;"><span>Carrefour</span></div></th>' +
-            '<th style="text-align: center;"><div style="display: flex; flex-direction: column; align-items: center; gap: 4px;"><img src="/static/logos/noon.png" alt="Noon" style="height: 24px; vertical-align: middle;"><span>Noon</span></div></th>' +
-            '<th style="text-align: center;"><div style="display: flex; flex-direction: column; align-items: center; gap: 4px;"><img src="/static/logos/talabat.png" alt="Talabat" style="height: 24px; vertical-align: middle;"><span>Talabat</span></div></th>' +
-            '<th>Best price</th>' +
-            '</tr></thead><tbody>';
-
+        // Card-based layout
+        section += '<div class="space-y-4">';
         displayProducts.forEach(p => {
             const stores = p.stores || {};
             const prices = [];
@@ -139,64 +124,45 @@ function renderMatchedProducts(matchedProducts, locations) {
                     prices.push({ store: s, price: info.price });
                 }
             });
-
             const hasPrices = prices.length > 0;
             const minPrice = hasPrices ? Math.min(...prices.map(x => x.price)) : null;
             const bestStores = hasPrices ? prices.filter(x => x.price === minPrice).map(x => x.store) : [];
+            // Product card
+            section += '<div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow bg-white">';
 
-            section += '<tr>';
+            // Product header with image and name
+            section += '<div class="flex items-start gap-4 mb-4">';
 
-            // Product name + Image
+            // Product image
             let imgHtml = '';
             if (p.primary_image) {
-                imgHtml = `<img src="${escapeHtml(p.primary_image)}" class="product-thumb" alt="img" onerror="this.style.display='none'"> `;
+                imgHtml = `<img src="${escapeHtml(p.primary_image)}" class="w-20 h-20 object-contain rounded bg-gray-50 flex-shrink-0" alt="img" onerror="this.style.display='none'">`;
+            } else {
+                imgHtml = '<div class="w-20 h-20 bg-gray-100 rounded flex items-center justify-center text-gray-400 text-xs flex-shrink-0">No image</div>';
             }
+            section += imgHtml;
 
-            section += `<td class="product-name-cell">
-                <div style="display: flex; align-items: center; gap: 8px;">
-                    ${imgHtml}
-                    <span>${escapeHtml(p.matched_name || '')}</span>
-                </div>
-            </td>`;
+            // Product info
+            section += '<div class="flex-1 min-w-0">';
+            section += `<h3 class="font-semibold text-gray-900 text-base mb-2">${escapeHtml(p.matched_name || '')}</h3>`;
 
             // Quantity
             let qtyText = '';
             let baseQty = 0;
             let baseUnit = '';
-
             if (p.quantity_value && p.quantity_unit) {
-                // Normalize for display
                 let dispVal = p.quantity_value;
-                let dispUnit = p.quantity_unit.toUpperCase(); // KG, G, L, ML, PACK, M
-
-                // User Request: "only use L, KG, and M", "1L, 1000ml... make it consistent"
-                // Logic: 
-                // 1. If >= 1000 G -> KG
-                // 2. If >= 1000 ML -> L
-                // 3. Ensure L/KG/ML/G/PACK/M are capitalized.
-
+                let dispUnit = p.quantity_unit.toUpperCase();
                 if (dispUnit === 'G' && dispVal >= 1000) {
                     dispVal = dispVal / 1000;
                     dispUnit = 'KG';
-                } else if (dispUnit === 'ML') {
-                    if (dispVal >= 1000) {
-                        dispVal = dispVal / 1000;
-                        dispUnit = 'L';
-                    }
-                    // If user meant 'M' strictly instead of 'ML', replace here.
-                    // "L, KG, and M". Assuming M means ML from context of similar size. 
-                    // But standard is ML. I'll stick to 'ML' for clarity unless 'M' is forced.
-                    // Wait, user said "only use L, KG, and M".
-                    // If I use 'ML', is checking user request "L, KG, and M".
-                    // Maybe "M" stands for "Milliliters"? Or "Meters"? 
-                    // Context "L, KG, M". I'll use "ML" because "M" is ambiguous (Meter?). 
-                    // But I will respect capitalization.
+                } else if (dispUnit === 'ML' && dispVal >= 1000) {
+                    dispVal = dispVal / 1000;
+                    dispUnit = 'L';
                 } else if (dispUnit === 'L' || dispUnit === 'LITER' || dispUnit === 'LITRE') {
                     dispUnit = 'L';
                 }
-
                 qtyText = `${parseFloat(dispVal.toFixed(2))} ${dispUnit}`;
-
                 // Base calc for unit price
                 const u = p.quantity_unit.toLowerCase();
                 if (u === 'g' || u === 'gram' || u === 'grams') {
@@ -221,58 +187,92 @@ function renderMatchedProducts(matchedProducts, locations) {
                     baseQty = p.quantity_value;
                     baseUnit = 'sqft';
                 }
-                //console.log(baseQty, baseUnit);
             }
-            section += `<td>${qtyText ? `<span class="quantity-badge">${escapeHtml(qtyText)}</span>` : '<span class="muted">n/a</span>'}</td>`;
 
+            if (qtyText) {
+                section += `<span class="inline-block bg-gray-100 text-gray-700 rounded-full px-3 py-1 text-sm font-medium">${escapeHtml(qtyText)}</span>`;
+            }
 
+            section += '</div></div>'; // Close product info and header
 
-            // Store price cells
+            // Store price cards
+            section += '<div class="grid grid-cols-1 md:grid-cols-3 gap-3">';
+
+            // Store configurations
+            const storeConfigs = {
+                carrefour: { name: 'Carrefour', logo: '/static/logos/carrefour.png', color: 'blue', initial: 'C' },
+                noon: { name: 'Noon', logo: '/static/logos/noon.png', color: 'gray', initial: 'N' },
+                talabat: { name: 'Talabat', logo: '/static/logos/talabat.png', color: 'orange', initial: 'T' }
+            };
+
             ['carrefour', 'noon', 'talabat'].forEach(store => {
                 const info = stores[store];
+                const config = storeConfigs[store];
+                const isBest = bestStores.includes(store);
+
                 if (info && typeof info.price === 'number') {
-                    const isBest = bestStores.includes(store);
                     let unitPrice = '';
                     if (baseQty > 0) {
-                        unitPrice = `(AED ${(info.price / baseQty).toFixed(2)} / ${baseUnit})`;
+                        unitPrice = `${(info.price / baseQty).toFixed(4)} AED/${baseUnit}`;
                     }
 
-                    // Clickable Price
-                    let priceHtml = `<div class="price-value">AED ${info.price.toFixed(2)}</div>`;
+                    // Best deal gets green border, others get gray
+                    const borderClass = isBest ? 'border-2 border-green-500 bg-green-50' : 'border border-gray-200 bg-gray-50';
+
+                    section += `<div class="${borderClass} rounded-lg p-3 relative">`;
+
+                    // Best deal badge
+                    if (isBest) {
+                        section += '<div class="absolute -top-2 -right-2 bg-green-500 text-white text-xs font-bold px-2 py-1 rounded-full shadow">Best Deal</div>';
+                    }
+
+                    // Store logo/initial
+                    section += '<div class="flex items-center gap-2 mb-2">';
+                    const colorClasses = {
+                        blue: 'bg-blue-500',
+                        gray: 'bg-gray-800',
+                        orange: 'bg-orange-500'
+                    };
+                    section += `<div class="${colorClasses[config.color]} text-white w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm">${config.initial}</div>`;
+                    section += `<span class="font-medium text-gray-700 text-sm">${config.name}</span>`;
+                    section += '</div>';
+
+                    // Price
+                    section += `<div class="text-xl font-bold ${isBest ? 'text-green-700' : 'text-gray-900'} mb-1">AED ${info.price.toFixed(2)}</div>`;
+
+                    // Unit price
+                    if (unitPrice) {
+                        section += `<div class="text-xs text-gray-500">${unitPrice}</div>`;
+                    }
+
+                    // View link
                     if (stores[store].product_url) {
-                        priceHtml = `<a href="${escapeHtml(stores[store].product_url)}" target="_blank" class="price-link">${priceHtml}</a>`;
+                        section += `<a href="${escapeHtml(stores[store].product_url)}" target="_blank" class="text-xs text-blue-600 hover:underline mt-2 inline-block">View →</a>`;
                     }
 
-                    section += `<td class="price-cell${isBest ? ' best-price' : ''}">` +
-                        priceHtml +
-                        (unitPrice ? `<div class="unit-price-footnote">${unitPrice}</div>` : '') +
-                        '</td>';
+                    section += '</div>';
                 } else {
-                    section += '<td class="price-cell muted">—</td>';
+                    // Not available
+                    section += `<div class="border border-gray-200 bg-gray-50 rounded-lg p-3 opacity-60">`;
+                    section += '<div class="flex items-center gap-2 mb-2">';
+                    const colorClasses = {
+                        blue: 'bg-blue-500',
+                        gray: 'bg-gray-800',
+                        orange: 'bg-orange-500'
+                    };
+                    section += `<div class="${colorClasses[config.color]} text-white w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm opacity-50">${config.initial}</div>`;
+                    section += `<span class="font-medium text-gray-400 text-sm">${config.name}</span>`;
+                    section += '</div>';
+                    section += '<div class="text-sm text-gray-400">Not available</div>';
+                    section += '</div>';
                 }
             });
 
-            // Best price summary
-            if (hasPrices) {
-                const bestStoreNames = bestStores.map(s => s.charAt(0).toUpperCase() + s.slice(1));
-
-                let bestUnitPrice = '';
-                if (baseQty > 0) {
-                    bestUnitPrice = `(AED ${(minPrice / baseQty).toFixed(2)} / ${baseUnit})`;
-                }
-                console.log(bestUnitPrice, minPrice, baseQty, baseUnit);
-                section += '<td class="price-cell">' +
-                    `<div class="price-value">AED ${minPrice.toFixed(2)}</div>` +
-                    (bestUnitPrice ? `<div class="unit-price-footnote">${bestUnitPrice}</div>` : '') +
-                    '</td>';
-            } else {
-                section += '<td class="price-cell muted">n/a</td>';
-            }
-
-            section += '</tr>';
+            section += '</div>'; // Close store cards grid
+            section += '</div>'; // Close product card
         });
-        section += '</tbody></table></div>';
 
+        section += '</div>'; // Close products container
         if (isOtherMatches) section += '</div>'; // Close otherMatchesContainer
         return section;
     };
@@ -290,7 +290,7 @@ function renderMatchedProducts(matchedProducts, locations) {
     }
 
     if (!html) {
-        container.innerHTML = '<div class="no-matches">No matches found after filtering.</div>';
+        container.innerHTML = '<div class="text-center text-text-muted py-8">No matches found after filtering.</div>';
     } else {
         container.innerHTML = html;
     }
@@ -308,16 +308,23 @@ async function checkPreloadStatus() {
             if (!statusElem) return;
 
             const state = status[store];
-            statusElem.className = 'store-status';
+
+            // Store-specific colors
+            const storeColors = {
+                carrefour: { loading: 'bg-blue-100 text-blue-800', ready: 'bg-blue-100 text-blue-800', spinner: 'border-blue-800' },
+                noon: { loading: 'bg-gray-100 text-gray-800', ready: 'bg-gray-100 text-gray-800', spinner: 'border-gray-800' },
+                talabat: { loading: 'bg-orange-100 text-orange-800', ready: 'bg-orange-100 text-orange-800', spinner: 'border-orange-800' }
+            };
+            const colors = storeColors[store] || storeColors.carrefour;
 
             if (state === 'loading' || state === 'not_started') {
-                statusElem.className += ' status-loading';
-                statusElem.innerHTML = `<div class="spinner"></div><span>${store.charAt(0).toUpperCase() + store.slice(1)}: Loading...</span>`;
+                statusElem.className = `store-status flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium ${colors.loading}`;
+                statusElem.innerHTML = `<div class="w-4 h-4 border-2 ${colors.spinner} border-t-transparent rounded-full spinner"></div><span>${store.charAt(0).toUpperCase() + store.slice(1)}: Loading...</span>`;
             } else if (state === 'ready') {
-                statusElem.className += ' status-ready';
+                statusElem.className = `store-status flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium ${colors.ready}`;
                 statusElem.innerHTML = `<span>✓ ${store.charAt(0).toUpperCase() + store.slice(1)}: Ready</span>`;
             } else if (state === 'error') {
-                statusElem.className += ' status-error';
+                statusElem.className = `store-status flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium bg-red-100 text-red-800`;
                 statusElem.innerHTML = `<span>✗ ${store.charAt(0).toUpperCase() + store.slice(1)}: Error</span>`;
             }
         });
@@ -341,13 +348,20 @@ function updateSearchStatusUI(status) {
         if (!statusElem) return;
 
         const state = status[store];
-        statusElem.className = 'store-status';
+
+        // Store-specific colors
+        const storeColors = {
+            carrefour: { loading: 'bg-blue-100 text-blue-800', ready: 'bg-blue-100 text-blue-800', spinner: 'border-blue-800' },
+            noon: { loading: 'bg-gray-100 text-gray-800', ready: 'bg-gray-100 text-gray-800', spinner: 'border-gray-800' },
+            talabat: { loading: 'bg-orange-100 text-orange-800', ready: 'bg-orange-100 text-orange-800', spinner: 'border-orange-800' }
+        };
+        const colors = storeColors[store] || storeColors.carrefour;
 
         if (state === 'searching') {
-            statusElem.className += ' status-loading';
-            statusElem.innerHTML = `<div class="spinner"></div><span>${store.charAt(0).toUpperCase() + store.slice(1)}: Searching...</span>`;
+            statusElem.className = `store-status flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium ${colors.loading}`;
+            statusElem.innerHTML = `<div class="w-4 h-4 border-2 ${colors.spinner} border-t-transparent rounded-full spinner"></div><span>${store.charAt(0).toUpperCase() + store.slice(1)}: Searching...</span>`;
         } else if (state === 'complete' || state === 'ready') {
-            statusElem.className += ' status-ready';
+            statusElem.className = `store-status flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium ${colors.ready}`;
             statusElem.innerHTML = `<span>✓ ${store.charAt(0).toUpperCase() + store.slice(1)}: Ready</span>`;
         }
     });
@@ -473,7 +487,7 @@ async function matchProducts() {
     document.getElementById('mainColumn').style.display = 'block';
 
     // Ensure raw results are hidden during matching to focus on results
-    document.getElementById('rawSection').classList.remove('visible');
+    document.getElementById('rawSection').classList.add('hidden');
     document.getElementById('toggleRawBtn').textContent = 'Show Raw Results Sidebar ➡️';
 
     try {
@@ -524,47 +538,40 @@ function renderRawResults(rawData) {
         const location = storeData.location;
 
         const card = document.createElement('div');
-        card.className = `store-card ${store.className}`;
+        card.className = `bg-white border border-gray-200 rounded-lg shadow p-4 ${store.className}`;
 
         let locationHTML = '';
         if (location) {
-            locationHTML = `<div class="store-location">📍 ${escapeHtml(location)}</div>`;
+            locationHTML = `<div class="flex items-center text-sm text-gray-500 mt-1"><svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11c0 .667-.333 2-1 2s-1-1.333-1-2 .333-2 1-2 1 1.333 1 2z"/></svg> ${escapeHtml(location)}</div>`;
         }
 
         let productsHTML = '';
         if (!products || products.length === 0) {
-            productsHTML = '<div class="no-results">No results found</div>';
+            productsHTML = `<div class="text-center text-gray-400">No results found</div>`;
         } else {
             products.forEach(product => {
                 let imgCode = '';
                 if (product.image_url) {
-                    imgCode = `<img src="${escapeHtml(product.image_url)}" class="product-thumb-small" style="width: 30px; height: 30px; object-fit: contain; border-radius: 4px;">`;
+                    imgCode = `<img src="${escapeHtml(product.image_url)}" class="w-10 h-10 object-contain rounded mr-2" alt="product">`;
                 }
-
                 let nameCode = highlightQueryMatch(product.name || '');
                 if (product.product_url) {
-                    nameCode = `<a href="${escapeHtml(product.product_url)}" target="_blank" class="raw-link">${nameCode}</a>`;
+                    nameCode = `<a href="${escapeHtml(product.product_url)}" target="_blank" class="text-primary-600 hover:underline">${nameCode}</a>`;
                 }
-
                 productsHTML += `
-                            <div class="product-row" style="display: flex; justify-content: space-between; align-items: baseline; gap: 8px;">
-                                <div class="product-row-name" style="flex: 1; display: flex; align-items: center; gap: 6px;">
-                                    ${imgCode}
-                                    <span>${nameCode}</span>
-                                </div>
-                                <div class="product-row-price" style="white-space: nowrap; font-weight: 600;">${escapeHtml(product.price || '')}</div>
-                            </div>
-                        `;
+            <div class="flex justify-between items-center py-2 border-b border-gray-100">
+                <div class="flex items-center">${imgCode}<span class="font-medium text-gray-800">${nameCode}</span></div>
+                <div class="font-semibold text-gray-900">${escapeHtml(product.price || '')}</div>
+            </div>`;
             });
         }
 
         card.innerHTML = `
-                    <div class="store-header">
-                        ${store.name}
-                        ${locationHTML}
-                    </div>
-                    ${productsHTML}
-                `;
+    <div class="flex items-center justify-between mb-2">
+        <h3 class="text-lg font-semibold text-gray-800">${store.name}</h3>
+    </div>
+    ${locationHTML}
+    <div class="mt-2">${productsHTML}</div>`;
 
         results.appendChild(card);
     });

@@ -5,60 +5,122 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dubai Grocery Price Comparator</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#f97015',
+                        accent: '#27aa83',
+                        secondary: '#e8eaed',
+                        destructive: '#ef4343',
+                        border: '#e2e4e9',
+                        muted: '#eeeff2',
+                        'text-primary': '#000000',
+                        'text-muted': '#6b7280',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .spinner {
+            animation: spin 1s linear infinite;
+        }
+    </style>
 </head>
 
-<body>
+<body class="bg-gray-100 min-h-screen">
+    <!-- Navigation Bar -->
+    <nav class="bg-white shadow-md border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <h1 class="text-2xl font-bold text-text-primary">🛒 Dubai Grocery Price Comparator</h1>
+                <div class="flex items-center gap-4">
+                    <span class="text-sm text-text-muted">Compare • Save • Shop Smart</span>
+                </div>
+            </div>
+        </div>
+    </nav>
+
     <!-- Header Section -->
-    <div class="header-section">
-        <h1>Dubai Grocery Price Comparator</h1>
-        <p class="subtitle">Compare SKUs across Carrefour, Noon & Talabat by price and weight/volume</p>
+    <div class="max-w-4xl mx-auto px-4 py-8">
+        <div class="bg-white rounded-2xl shadow-lg p-8 text-center">
+            <h2 class="text-3xl md:text-4xl font-bold text-text-primary mb-3">
+                Find the Best Grocery Prices
+            </h2>
+            <p class="text-text-muted text-lg mb-6">
+                Compare SKUs across Carrefour, Noon & Talabat by price and weight/volume
+            </p>
 
-        <div class="search-box" style="margin-top: 20px;">
-            <input type="text" id="searchInput"
-                placeholder="Enter grocery item (e.g., bayara moong dal, milk, basmati rice)..."
-                onkeypress="if(event.key==='Enter') searchGrocery()">
-            <button id="searchBtn" onclick="searchGrocery()">Search</button>
+            <!-- Search Box -->
+            <div class="flex gap-3 mt-6">
+                <input type="text" id="searchInput"
+                    placeholder="Enter grocery item (e.g., bayara moong dal, milk, basmati rice)..."
+                    onkeypress="if(event.key==='Enter') searchGrocery()"
+                    class="flex-1 px-4 py-3 text-base border-2 border-border rounded-xl outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/20">
+                <button id="searchBtn" onclick="searchGrocery()"
+                    class="px-8 py-3 bg-primary text-white font-semibold rounded-xl hover:bg-primary/90 active:scale-95 transition-all disabled:bg-gray-300 disabled:cursor-not-allowed whitespace-nowrap">
+                    Search
+                </button>
+            </div>
+
+            <!-- Store Status -->
+            <div class="flex flex-wrap justify-center gap-3 mt-6 p-4 bg-muted rounded-xl">
+                <div class="store-status flex items-center gap-2 px-4 py-2 rounded-full bg-blue-100 text-blue-800 text-sm font-medium"
+                    id="status-carrefour">
+                    <div class="w-4 h-4 border-2 border-blue-800 border-t-transparent rounded-full spinner"></div>
+                    <span>Carrefour: Loading...</span>
+                </div>
+                <div class="store-status flex items-center gap-2 px-4 py-2 rounded-full bg-gray-100 text-gray-800 text-sm font-medium"
+                    id="status-noon">
+                    <div class="w-4 h-4 border-2 border-gray-800 border-t-transparent rounded-full spinner"></div>
+                    <span>Noon: Loading...</span>
+                </div>
+                <div class="store-status flex items-center gap-2 px-4 py-2 rounded-full bg-orange-100 text-orange-800 text-sm font-medium"
+                    id="status-talabat">
+                    <span>Talabat: Ready</span>
+                </div>
+            </div>
+
+            <!-- Loading States -->
+            <div class="loading hidden text-primary text-center py-4 font-medium" id="loading">
+                Searching stores...
+            </div>
+            <div class="loading hidden text-primary text-center py-4 font-medium" id="matchingLoading">
+                Matching SKUs...
+            </div>
+            <div id="error"></div>
         </div>
-
-        <div class="preload-status" id="preloadStatus">
-            <div class="store-status status-loading" id="status-carrefour">
-                <div class="spinner"></div>
-                <span>Carrefour: Loading...</span>
-            </div>
-            <div class="store-status status-loading" id="status-noon">
-                <div class="spinner"></div>
-                <span>Noon: Loading...</span>
-            </div>
-            <div class="store-status status-ready" id="status-talabat">
-                <span>Talabat: Ready</span>
-            </div>
-        </div>
-
-        <div class="loading" id="loading">Searching stores...</div>
-        <div class="loading" id="matchingLoading" style="display: none;">Matching SKUs with AI...</div>
-        <div id="error"></div>
     </div>
 
     <!-- Main App Layout -->
-    <div class="app-layout">
+    <div class="flex gap-6 px-4 pb-8 max-w-[1800px] mx-auto items-start">
         <!-- Main Results Column -->
-        <div class="main-column" id="mainColumn">
-
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                <h2 class="section-title">Matched Results</h2>
-                <div style="display: flex; gap: 12px; align-items: center;">
-                    <!-- New Sort Dropdown -->
+        <div class="main-column hidden flex-1 bg-white rounded-2xl shadow-lg p-6" id="mainColumn">
+            <div class="flex flex-wrap justify-between items-center gap-4 mb-6">
+                <h2 class="text-2xl font-bold text-text-primary">Matched Results</h2>
+                <div class="flex gap-3 items-center">
+                    <!-- Sort Dropdown -->
                     <select id="sortOptions" onchange="matchProducts()"
-                        style="padding: 8px; border-radius: 8px; border: 1px solid #ddd;">
+                        class="px-4 py-2 border border-border rounded-lg bg-white text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary">
                         <option value="price_asc">Price: Low to High</option>
                         <option value="price_desc">Price: High to Low</option>
                         <option value="name_asc">Name: A to Z</option>
                         <option value="name_desc">Name: Z to A</option>
                     </select>
 
-                    <button id="toggleRawBtn" class="toggle-raw-btn" onclick="toggleRawResults()"
-                        style="display: none; font-size: 14px; padding: 6px 12px; border: 1px solid #ddd; border-radius: 6px;">
+                    <!-- Toggle Raw Results Button -->
+                    <button id="toggleRawBtn"
+                        class="toggle-raw-btn hidden px-4 py-2 text-sm border border-border rounded-lg hover:bg-gray-50 transition-colors"
+                        onclick="toggleRawResults()">
                         Show Raw Results Sidebar ➡️
                     </button>
                 </div>
@@ -68,14 +130,15 @@
         </div>
 
         <!-- Raw Results Sidebar -->
-        <div class="raw-sidebar" id="rawSection">
-            <div class="section-header">
-                <div class="section-title">Raw Store Results</div>
+        <div class="raw-sidebar hidden w-full max-w-md bg-white rounded-2xl shadow-lg p-6" id="rawSection">
+            <div class="mb-4">
+                <h3 class="text-xl font-bold text-text-primary">Raw Store Results</h3>
             </div>
-            <div class="matched-note" id="locationNote"></div>
-            <div id="rawResults" style="display: flex; flex-direction: column; gap: 16px;"></div>
+            <div class="text-sm text-text-muted mb-4" id="locationNote"></div>
+            <div id="rawResults" class="flex flex-col gap-4"></div>
         </div>
     </div>
+
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
 

@@ -83,8 +83,9 @@ function renderMatchedProducts(matchedProducts, locations) {
         if (products.length === 0 && !isOtherMatches) return ''; // Skip empty strict
         let section = '';
         // Add filter buttons only for Other Matches
+        // Add filter buttons only for Other Matches
         if (isOtherMatches) {
-            section += `<div class="mt-6 mb-4"><h3 class="text-xl font-bold text-text-primary">${title}</h3></div>`;
+            section += `<div class="mb-4 pt-2 border-b border-gray-100 pb-4"><h2 class="text-2xl font-bold text-text-primary mb-4">${title}</h2>`;
             // Generate buttons from query
             const query = document.getElementById('searchInput').value.trim();
             if (query) {
@@ -99,7 +100,10 @@ function renderMatchedProducts(matchedProducts, locations) {
                     section += `</div></div>`;
                 }
             }
+            section += '</div>'; // Close header/filter section
             section += '<div id="otherMatchesContainer">'; // Container for filtered rows
+        } else {
+            if (title) section += `<div class="mb-4"><h2 class="text-2xl font-bold text-text-primary">${title}</h2></div>`;
         }
         // If filtering is active for "other matches", use filtered list
         let displayProducts = products;
@@ -172,21 +176,21 @@ function renderMatchedProducts(matchedProducts, locations) {
             // Main Card Container (Flex Row)
             section += '<div class="flex flex-col md:flex-row items-stretch border border-gray-200 rounded-xl bg-white shadow-sm overflow-hidden hover:shadow-md transition-shadow group">';
 
-            // 1. LEFT COLUMN: Image
-            section += '<div class="w-full md:w-48 bg-gray-50 flex items-center justify-center p-6 border-b md:border-b-0 md:border-r border-gray-100">';
+            // 1. LEFT COLUMN: Image - Smaller
+            section += '<div class="w-full md:w-32 bg-gray-50 flex items-center justify-center p-2 border-b md:border-b-0 md:border-r border-gray-100">';
             if (p.primary_image) {
-                section += `<img src="${escapeHtml(p.primary_image)}" class="w-32 h-32 object-contain mix-blend-multiply" alt="img" onerror="this.style.display='none'">`;
+                section += `<img src="${escapeHtml(p.primary_image)}" class="w-28 h-28 object-contain mix-blend-multiply" alt="img" onerror="this.style.display='none'">`;
             } else {
-                section += '<div class="w-20 h-20 flex items-center justify-center text-gray-300"><svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg></div>';
+                section += '<div class="w-24 h-24 flex items-center justify-center text-gray-300"><svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg></div>';
             }
             section += '</div>';
 
-            // 2. MIDDLE COLUMN: Info & Store Cards
-            section += '<div class="flex-1 p-6 flex flex-col justify-between">';
+            // 2. MIDDLE COLUMN: Info & Store Cards - Compact
+            section += '<div class="flex-1 p-2 flex flex-col justify-between">';
 
             // Top: Header
-            section += '<div class="mb-6">';
-            section += `<h3 class="font-bold text-gray-900 text-lg mb-2 leading-tight">${escapeHtml(p.matched_name || '')}</h3>`;
+            section += '<div class="mb-2">';
+            section += `<h3 class="font-bold text-gray-900 text-lg mb-0.5 leading-tight line-clamp-1">${escapeHtml(p.matched_name || '')}</h3>`;
             if (qtyText) {
                 section += `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">${escapeHtml(qtyText)}</span>`;
             }
@@ -208,20 +212,20 @@ function renderMatchedProducts(matchedProducts, locations) {
 
                 if (info && typeof info.price === 'number') {
                     // Active Store Card
-                    section += `<div class="relative border ${isBest ? 'border-green-500 bg-green-50/30' : 'border-gray-200 bg-white'} rounded-lg p-3 transition-all duration-200 hover:scale-105 hover:shadow-lg cursor-default">`;
+                    section += `<div class="relative border ${isBest ? 'border-green-500 bg-green-50/30' : 'border-gray-200 bg-white'} rounded-lg p-2 transition-all duration-200 hover:scale-105 hover:shadow-lg cursor-default">`;
 
                     // Best Deal Badge (Small, inside card)
                     if (isBest) {
                         section += '<div class="absolute -top-2 -right-2 bg-green-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm z-10">BEST DEAL</div>';
                     }
 
-                    section += '<div class="flex items-center justify-start mb-2 h-8">';
+                    section += '<div class="flex items-center justify-start mb-1 h-6">';
                     // Logo Only
-                    section += `<img src="${escapeHtml(config.logo)}" alt="${config.name}" class="h-6 w-auto object-contain" />`;
+                    section += `<img src="${escapeHtml(config.logo)}" alt="${config.name}" class="h-5 w-auto object-contain" />`;
                     section += '</div>';
 
                     // Price
-                    section += `<div class="text-lg font-bold ${isBest ? 'text-green-700' : 'text-gray-900'}">AED ${info.price.toFixed(2)}</div>`;
+                    section += `<div class="text-base font-bold ${isBest ? 'text-green-700' : 'text-gray-900'}">AED ${info.price.toFixed(2)}</div>`;
 
                     // View Link
                     if (stores[store].product_url) {
@@ -232,11 +236,11 @@ function renderMatchedProducts(matchedProducts, locations) {
 
                 } else {
                     // Inactive Store Card
-                    section += '<div class="border border-gray-100 bg-gray-50/50 rounded-lg p-3 opacity-60 grayscale">';
-                    section += '<div class="flex items-center justify-start mb-2 h-8">';
-                    section += `<img src="${escapeHtml(config.logo)}" alt="${config.name}" class="h-6 w-auto object-contain opacity-50" />`;
+                    section += '<div class="border border-gray-100 bg-gray-50/50 rounded-lg p-2 opacity-60 grayscale">';
+                    section += '<div class="flex items-center justify-start mb-1 h-6">';
+                    section += `<img src="${escapeHtml(config.logo)}" alt="${config.name}" class="h-5 w-auto object-contain opacity-50" />`;
                     section += '</div>';
-                    section += '<div class="text-sm text-gray-300 font-medium">Not available</div>';
+                    section += '<div class="text-xs text-gray-300 font-medium">Not available</div>';
                     section += '</div>';
                 }
             });
@@ -247,22 +251,22 @@ function renderMatchedProducts(matchedProducts, locations) {
             if (minPrice !== null) {
                 const bestUnitPrice = baseQty > 0 ? (minPrice / baseQty).toFixed(2) : null;
 
-                section += '<div class="w-full md:w-48 bg-gray-50 border-l border-gray-100 p-6 flex flex-col justify-center">';
-                section += '<div class="text-gray-400 text-sm font-medium mb-1 uppercase tracking-wider">Best Deal</div>';
-                section += `<div class="text-3xl font-bold text-gray-900 leading-none mb-1">${minPrice.toFixed(2)}</div>`;
-                section += '<div class="text-sm text-gray-500 font-medium">AED</div>';
+                section += '<div class="w-full md:w-40 bg-gray-50 border-l border-gray-100 p-3 flex flex-col justify-center">';
+                section += '<div class="text-gray-400 text-xs font-medium mb-1 uppercase tracking-wider">Best Deal</div>';
+                section += `<div class="text-2xl font-bold text-gray-900 leading-none mb-1">${minPrice.toFixed(2)}</div>`;
+                section += '<div class="text-xs text-gray-500 font-medium">AED</div>';
 
                 if (bestUnitPrice) {
-                    section += `<div class="mt-4 pt-4 border-t border-gray-200">`;
-                    section += `<div class="text-xs text-gray-400">Unit Price</div>`;
-                    section += `<div class="text-sm font-semibold text-gray-600">${bestUnitPrice} AED/${baseUnit}</div>`;
+                    section += `<div class="mt-2 pt-2 border-t border-gray-200">`;
+                    section += `<div class="text-[10px] text-gray-400">Unit Price</div>`;
+                    section += `<div class="text-xs font-semibold text-gray-600">${bestUnitPrice} AED/${baseUnit}</div>`;
                     section += `</div>`;
                 }
 
                 section += '</div>';
             } else {
                 // Empty state for right column if no prices
-                section += '<div class="w-full md:w-48 bg-gray-50 border-l border-gray-100 p-6 flex items-center justify-center text-gray-300 text-sm">No prices</div>';
+                section += '<div class="w-full md:w-40 bg-gray-50 border-l border-gray-100 p-3 flex items-center justify-center text-gray-300 text-xs">No prices</div>';
             }
 
             section += '</div>'; // Close Main Card
@@ -270,12 +274,14 @@ function renderMatchedProducts(matchedProducts, locations) {
 
         section += '</div>'; // Close products container wrapper
         if (isOtherMatches) section += '</div>'; // Close otherMatchesContainer
+        // Wrap in white container
+        section = `<div class="bg-white rounded-2xl shadow-lg p-6 mb-8">${section}</div>`;
         return section;
     };
 
     // Render Exact Matches
     if (exactMatches.length > 0) {
-        html += buildTable(exactMatches, 'Exact Product Match Found', false);
+        html += buildTable(exactMatches, '', false);
     }
 
     // Render Other Matches
@@ -304,7 +310,7 @@ async function checkPreloadStatus() {
             const state = status[store];
             // Update duration for preloading if needed
             if (store === 'noon') searchProgressState.noon.duration = 10000;
-            if (store === 'carrefour') searchProgressState.carrefour.duration = 10000;
+            if (store === 'carrefour') searchProgressState.carrefour.duration = 15000;
             if (store === 'talabat') searchProgressState.talabat.duration = 2000; // Keep fast
 
             if (state === 'loading' || state === 'not_started') {
@@ -327,7 +333,7 @@ async function checkPreloadStatus() {
         } else {
             // Reset durations for search phase after preloading is done
             searchProgressState.noon.duration = 7000;
-            searchProgressState.carrefour.duration = 10000;
+            searchProgressState.carrefour.duration = 15000;
         }
     } catch (error) {
         console.error('Error checking preload status:', error);
@@ -339,7 +345,7 @@ window.addEventListener('DOMContentLoaded', checkPreloadStatus);
 let searchStatusInterval = null;
 
 const searchProgressState = {
-    carrefour: { active: false, interval: null, startTime: null, duration: 10000 },
+    carrefour: { active: false, interval: null, startTime: null, duration: 15000 },
     noon: { active: false, interval: null, startTime: null, duration: 7000 },
     talabat: { active: false, interval: null, startTime: null, duration: 2000 }
 };

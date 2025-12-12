@@ -73,20 +73,41 @@
             </div>
 
             <!-- Store Status -->
-            <div class="flex flex-wrap justify-center gap-3 mt-6 p-4 bg-muted rounded-xl">
-                <div class="store-status flex items-center gap-2 px-4 py-2 rounded-full bg-blue-100 text-blue-800 text-sm font-medium"
-                    id="status-carrefour">
-                    <div class="w-4 h-4 border-2 border-blue-800 border-t-transparent rounded-full spinner"></div>
-                    <span>Carrefour: Loading...</span>
+            <div class="flex flex-wrap justify-center gap-4 mt-6 p-4 bg-gray-50/50 rounded-2xl border border-gray-100">
+                <!-- Carrefour -->
+                <div class="relative overflow-hidden flex flex-col justify-center bg-white border border-gray-200 rounded-xl w-40 h-24 shadow-sm transition-all"
+                    id="card-carrefour">
+                    <div class="absolute bottom-0 left-0 h-1.5 bg-blue-500 transition-all duration-300 ease-out"
+                        style="width: 0%" id="progress-carrefour"></div>
+                    <div class="flex flex-col items-center gap-2 p-3">
+                        <img src="{{ url_for('static', filename='logos/carrefour.png') }}" alt="Carrefour"
+                            class="h-8 w-auto object-contain">
+                        <span class="text-xs font-medium text-gray-500" id="label-carrefour">Waiting...</span>
+                    </div>
                 </div>
-                <div class="store-status flex items-center gap-2 px-4 py-2 rounded-full bg-gray-100 text-gray-800 text-sm font-medium"
-                    id="status-noon">
-                    <div class="w-4 h-4 border-2 border-gray-800 border-t-transparent rounded-full spinner"></div>
-                    <span>Noon: Loading...</span>
+
+                <!-- Noon -->
+                <div class="relative overflow-hidden flex flex-col justify-center bg-white border border-gray-200 rounded-xl w-40 h-24 shadow-sm transition-all"
+                    id="card-noon">
+                    <div class="absolute bottom-0 left-0 h-1.5 bg-black transition-all duration-300 ease-out"
+                        style="width: 0%" id="progress-noon"></div>
+                    <div class="flex flex-col items-center gap-2 p-3">
+                        <img src="{{ url_for('static', filename='logos/noon.png') }}" alt="Noon"
+                            class="h-8 w-auto object-contain">
+                        <span class="text-xs font-medium text-gray-500" id="label-noon">Waiting...</span>
+                    </div>
                 </div>
-                <div class="store-status flex items-center gap-2 px-4 py-2 rounded-full bg-orange-100 text-orange-800 text-sm font-medium"
-                    id="status-talabat">
-                    <span>Talabat: Ready</span>
+
+                <!-- Talabat -->
+                <div class="relative overflow-hidden flex flex-col justify-center bg-white border border-gray-200 rounded-xl w-40 h-24 shadow-sm transition-all"
+                    id="card-talabat">
+                    <div class="absolute bottom-0 left-0 h-1.5 bg-[#ff5a00] transition-all duration-300 ease-out"
+                        style="width: 0%" id="progress-talabat"></div>
+                    <div class="flex flex-col items-center gap-2 p-3">
+                        <img src="{{ url_for('static', filename='logos/talabat.png') }}" alt="Talabat"
+                            class="h-8 w-auto object-contain">
+                        <span class="text-xs font-medium text-gray-500" id="label-talabat">Waiting...</span>
+                    </div>
                 </div>
             </div>
 

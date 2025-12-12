@@ -140,24 +140,13 @@ def search_carrefour(item):
         soup = BeautifulSoup(driver.page_source, 'html.parser')
         products = []
         
-        # Find product containers
-        # User provided HTML shows root is div.relative containing the product card
-        # We need a robust selector. The user snippet has `class="relative flex overflow-hidden rounded-xl ..."`
-        # Let's target the anchor tag which seems central: `a` with href containing `/p/` usually?
-        # Or `div` with `rounded-xl border-solid bg-white`.
+        # Find product containers - using robust parent selector
+        product_containers = soup.find_all('div', class_=lambda x: x and 'mb-lg' in str(x) and 'flex' in str(x) and 'w-full' in str(x))
         
-        # Find product containers - Reverting to broader selector
-        product_containers = soup.find_all('div', class_=lambda x: x and 'max-w-' in str(x) and 'sm:max-w-' in str(x))
-        
-        for container in product_containers[:40]: # Increased limit to ensure we hit results
+        for container in product_containers[:40]: 
             try:
-                # Find the link with product name (skip labels like "Bestseller")
-                link = container.find('a', href=True)
-                if not link:
-                    continue
-                
-                # Extract name from span within the product link (not label)
-                name_div = link.find('div', class_=lambda x: x and 'line-clamp-2' in str(x))
+                # 1. Extract Name
+                name_div = container.find('div', class_=lambda x: x and 'line-clamp-2' in str(x))
                 if not name_div:
                     continue
                 name_elem = name_div.find('span')
@@ -200,13 +189,20 @@ def search_carrefour(item):
                                 img_elem = container.find('img')
                             
                             if img_elem:
-                                image_url = img_elem.get('src') or img_elem.get('data-src')
-                        except:
-                            pass
+                                # Check for lazy loading attributes first
+                                image_url = img_elem.get('src')
+                                if not image_url or 'data:image' in image_url:
+                                    image_url = img_elem.get('data-src') or img_elem.get('data-srcset') or img_elem.get('srcset')
+                                    # If charset, take first URL
+                                    if image_url and ' ' in image_url:
+                                        image_url = image_url.split(' ')[0]
+                        except Exception as e:
+                            print(f"[Carrefour] Error extracting image: {str(e)}")
 
                         # Extract Product URL
                         product_url = None
-                        if link.get('href'):
+                        link = name_div.find_parent('a')
+                        if link and link.get('href'):
                             product_url = "https://www.carrefouruae.com" + link.get('href')
 
                         products.append({

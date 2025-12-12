@@ -88,7 +88,7 @@ function renderMatchedProducts(matchedProducts, locations) {
             // Generate buttons from query
             const query = document.getElementById('searchInput').value.trim();
             if (query) {
-                const words = query.split(/\\s+/).filter(w => w.length > 2); // Only words > 2 chars
+                const words = query.split(/\s+/).filter(w => w.length > 0); // All words filter
                 if (words.length > 0) {
                     section += `<div class="flex flex-wrap items-center gap-2 mb-4"><span class="text-sm text-text-muted font-medium">Filter matches by:</span><div class="flex flex-wrap gap-2">`;
                     words.forEach(word => {
@@ -100,8 +100,6 @@ function renderMatchedProducts(matchedProducts, locations) {
                 }
             }
             section += '<div id="otherMatchesContainer">'; // Container for filtered rows
-        } else {
-            section += `<div class="mb-4"><h3 class="text-xl font-bold text-text-primary">${title}</h3></div>`;
         }
         // If filtering is active for "other matches", use filtered list
         let displayProducts = products;
@@ -114,7 +112,7 @@ function renderMatchedProducts(matchedProducts, locations) {
             return '';
         }
         // Card-based layout
-        section += '<div class="space-y-4">';
+        section += '<div class="space-y-6">';
         displayProducts.forEach(p => {
             const stores = p.stores || {};
             const prices = [];
@@ -127,26 +125,8 @@ function renderMatchedProducts(matchedProducts, locations) {
             const hasPrices = prices.length > 0;
             const minPrice = hasPrices ? Math.min(...prices.map(x => x.price)) : null;
             const bestStores = hasPrices ? prices.filter(x => x.price === minPrice).map(x => x.store) : [];
-            // Product card
-            section += '<div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow bg-white">';
 
-            // Product header with image and name
-            section += '<div class="flex items-start gap-4 mb-4">';
-
-            // Product image
-            let imgHtml = '';
-            if (p.primary_image) {
-                imgHtml = `<img src="${escapeHtml(p.primary_image)}" class="w-20 h-20 object-contain rounded bg-gray-50 flex-shrink-0" alt="img" onerror="this.style.display='none'">`;
-            } else {
-                imgHtml = '<div class="w-20 h-20 bg-gray-100 rounded flex items-center justify-center text-gray-400 text-xs flex-shrink-0">No image</div>';
-            }
-            section += imgHtml;
-
-            // Product info
-            section += '<div class="flex-1 min-w-0">';
-            section += `<h3 class="font-semibold text-gray-900 text-base mb-2">${escapeHtml(p.matched_name || '')}</h3>`;
-
-            // Quantity
+            // Calculate quantities for display
             let qtyText = '';
             let baseQty = 0;
             let baseUnit = '';
@@ -189,16 +169,32 @@ function renderMatchedProducts(matchedProducts, locations) {
                 }
             }
 
-            if (qtyText) {
-                section += `<span class="inline-block bg-gray-100 text-gray-700 rounded-full px-3 py-1 text-sm font-medium">${escapeHtml(qtyText)}</span>`;
+            // Main Card Container (Flex Row)
+            section += '<div class="flex flex-col md:flex-row items-stretch border border-gray-200 rounded-xl bg-white shadow-sm overflow-hidden hover:shadow-md transition-shadow group">';
+
+            // 1. LEFT COLUMN: Image
+            section += '<div class="w-full md:w-48 bg-gray-50 flex items-center justify-center p-6 border-b md:border-b-0 md:border-r border-gray-100">';
+            if (p.primary_image) {
+                section += `<img src="${escapeHtml(p.primary_image)}" class="w-32 h-32 object-contain mix-blend-multiply" alt="img" onerror="this.style.display='none'">`;
+            } else {
+                section += '<div class="w-20 h-20 flex items-center justify-center text-gray-300"><svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg></div>';
             }
+            section += '</div>';
 
-            section += '</div></div>'; // Close product info and header
+            // 2. MIDDLE COLUMN: Info & Store Cards
+            section += '<div class="flex-1 p-6 flex flex-col justify-between">';
 
-            // Store price cards
-            section += '<div class="grid grid-cols-1 md:grid-cols-3 gap-3">';
+            // Top: Header
+            section += '<div class="mb-6">';
+            section += `<h3 class="font-bold text-gray-900 text-lg mb-2 leading-tight">${escapeHtml(p.matched_name || '')}</h3>`;
+            if (qtyText) {
+                section += `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">${escapeHtml(qtyText)}</span>`;
+            }
+            section += '</div>';
 
-            // Store configurations
+            // Bottom: Store Cards Grid
+            section += '<div class="grid grid-cols-1 md:grid-cols-3 gap-4">';
+
             const storeConfigs = {
                 carrefour: { name: 'Carrefour', logo: '/static/logos/carrefour.png', color: 'blue', initial: 'C' },
                 noon: { name: 'Noon', logo: '/static/logos/noon.png', color: 'gray', initial: 'N' },
@@ -211,68 +207,68 @@ function renderMatchedProducts(matchedProducts, locations) {
                 const isBest = bestStores.includes(store);
 
                 if (info && typeof info.price === 'number') {
-                    let unitPrice = '';
-                    if (baseQty > 0) {
-                        unitPrice = `${(info.price / baseQty).toFixed(4)} AED/${baseUnit}`;
-                    }
+                    // Active Store Card
+                    section += `<div class="relative border ${isBest ? 'border-green-500 bg-green-50/30' : 'border-gray-200 bg-white'} rounded-lg p-3 transition-all duration-200 hover:scale-105 hover:shadow-lg cursor-default">`;
 
-                    // Best deal gets green border, others get gray
-                    const borderClass = isBest ? 'border-2 border-green-500 bg-green-50' : 'border border-gray-200 bg-gray-50';
-
-                    section += `<div class="${borderClass} rounded-lg p-3 relative">`;
-
-                    // Best deal badge
+                    // Best Deal Badge (Small, inside card)
                     if (isBest) {
-                        section += '<div class="absolute -top-2 -right-2 bg-green-500 text-white text-xs font-bold px-2 py-1 rounded-full shadow">Best Deal</div>';
+                        section += '<div class="absolute -top-2 -right-2 bg-green-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm z-10">BEST DEAL</div>';
                     }
 
-                    // Store logo/initial
-                    section += '<div class="flex items-center gap-2 mb-2">';
-                    const colorClasses = {
-                        blue: 'bg-blue-500',
-                        gray: 'bg-gray-800',
-                        orange: 'bg-orange-500'
-                    };
-                    section += `<div class="${colorClasses[config.color]} text-white w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm">${config.initial}</div>`;
-                    section += `<span class="font-medium text-gray-700 text-sm">${config.name}</span>`;
+                    section += '<div class="flex items-center justify-start mb-2 h-8">';
+                    // Logo Only
+                    section += `<img src="${escapeHtml(config.logo)}" alt="${config.name}" class="h-6 w-auto object-contain" />`;
                     section += '</div>';
 
                     // Price
-                    section += `<div class="text-xl font-bold ${isBest ? 'text-green-700' : 'text-gray-900'} mb-1">AED ${info.price.toFixed(2)}</div>`;
+                    section += `<div class="text-lg font-bold ${isBest ? 'text-green-700' : 'text-gray-900'}">AED ${info.price.toFixed(2)}</div>`;
 
-                    // Unit price
-                    if (unitPrice) {
-                        section += `<div class="text-xs text-gray-500">${unitPrice}</div>`;
-                    }
-
-                    // View link
+                    // View Link
                     if (stores[store].product_url) {
-                        section += `<a href="${escapeHtml(stores[store].product_url)}" target="_blank" class="text-xs text-blue-600 hover:underline mt-2 inline-block">View →</a>`;
+                        section += `<a href="${escapeHtml(stores[store].product_url)}" target="_blank" class="absolute inset-0 z-0"></a>`; // Full card clickable
                     }
 
                     section += '</div>';
+
                 } else {
-                    // Not available
-                    section += `<div class="border border-gray-200 bg-gray-50 rounded-lg p-3 opacity-60">`;
-                    section += '<div class="flex items-center gap-2 mb-2">';
-                    const colorClasses = {
-                        blue: 'bg-blue-500',
-                        gray: 'bg-gray-800',
-                        orange: 'bg-orange-500'
-                    };
-                    section += `<div class="${colorClasses[config.color]} text-white w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm opacity-50">${config.initial}</div>`;
-                    section += `<span class="font-medium text-gray-400 text-sm">${config.name}</span>`;
+                    // Inactive Store Card
+                    section += '<div class="border border-gray-100 bg-gray-50/50 rounded-lg p-3 opacity-60 grayscale">';
+                    section += '<div class="flex items-center justify-start mb-2 h-8">';
+                    section += `<img src="${escapeHtml(config.logo)}" alt="${config.name}" class="h-6 w-auto object-contain opacity-50" />`;
                     section += '</div>';
-                    section += '<div class="text-sm text-gray-400">Not available</div>';
+                    section += '<div class="text-sm text-gray-300 font-medium">Not available</div>';
                     section += '</div>';
                 }
             });
+            section += '</div>'; // End Store Grid
+            section += '</div>'; // End Middle Column
 
-            section += '</div>'; // Close store cards grid
-            section += '</div>'; // Close product card
+            // 3. RIGHT COLUMN: Best Deal Showcase
+            if (minPrice !== null) {
+                const bestUnitPrice = baseQty > 0 ? (minPrice / baseQty).toFixed(2) : null;
+
+                section += '<div class="w-full md:w-48 bg-gray-50 border-l border-gray-100 p-6 flex flex-col justify-center">';
+                section += '<div class="text-gray-400 text-sm font-medium mb-1 uppercase tracking-wider">Best Deal</div>';
+                section += `<div class="text-3xl font-bold text-gray-900 leading-none mb-1">${minPrice.toFixed(2)}</div>`;
+                section += '<div class="text-sm text-gray-500 font-medium">AED</div>';
+
+                if (bestUnitPrice) {
+                    section += `<div class="mt-4 pt-4 border-t border-gray-200">`;
+                    section += `<div class="text-xs text-gray-400">Unit Price</div>`;
+                    section += `<div class="text-sm font-semibold text-gray-600">${bestUnitPrice} AED/${baseUnit}</div>`;
+                    section += `</div>`;
+                }
+
+                section += '</div>';
+            } else {
+                // Empty state for right column if no prices
+                section += '<div class="w-full md:w-48 bg-gray-50 border-l border-gray-100 p-6 flex items-center justify-center text-gray-300 text-sm">No prices</div>';
+            }
+
+            section += '</div>'; // Close Main Card
         });
 
-        section += '</div>'; // Close products container
+        section += '</div>'; // Close products container wrapper
         if (isOtherMatches) section += '</div>'; // Close otherMatchesContainer
         return section;
     };
@@ -298,40 +294,40 @@ function renderMatchedProducts(matchedProducts, locations) {
 
 
 // ---------- Status polling ----------
+// Initial Preload Check
 async function checkPreloadStatus() {
     try {
         const response = await fetch('/status');
         const status = await response.json();
 
         Object.keys(status).forEach(store => {
-            const statusElem = document.getElementById(`status-${store}`);
-            if (!statusElem) return;
-
             const state = status[store];
-
-            // Store-specific colors
-            const storeColors = {
-                carrefour: { loading: 'bg-blue-100 text-blue-800', ready: 'bg-blue-100 text-blue-800', spinner: 'border-blue-800' },
-                noon: { loading: 'bg-gray-100 text-gray-800', ready: 'bg-gray-100 text-gray-800', spinner: 'border-gray-800' },
-                talabat: { loading: 'bg-orange-100 text-orange-800', ready: 'bg-orange-100 text-orange-800', spinner: 'border-orange-800' }
-            };
-            const colors = storeColors[store] || storeColors.carrefour;
+            // Update duration for preloading if needed
+            if (store === 'noon') searchProgressState.noon.duration = 10000;
+            if (store === 'carrefour') searchProgressState.carrefour.duration = 10000;
+            if (store === 'talabat') searchProgressState.talabat.duration = 2000; // Keep fast
 
             if (state === 'loading' || state === 'not_started') {
-                statusElem.className = `store-status flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium ${colors.loading}`;
-                statusElem.innerHTML = `<div class="w-4 h-4 border-2 ${colors.spinner} border-t-transparent rounded-full spinner"></div><span>${store.charAt(0).toUpperCase() + store.slice(1)}: Loading...</span>`;
+                // Start progress
+                const label = document.getElementById(`label-${store}`);
+                if (label && label.textContent !== 'Preloading...') {
+                    label.textContent = 'Preloading...';
+                    startSearchProgress(store);
+                }
             } else if (state === 'ready') {
-                statusElem.className = `store-status flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium ${colors.ready}`;
-                statusElem.innerHTML = `<span>✓ ${store.charAt(0).toUpperCase() + store.slice(1)}: Ready</span>`;
+                completeSearchProgress(store, false);
             } else if (state === 'error') {
-                statusElem.className = `store-status flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium bg-red-100 text-red-800`;
-                statusElem.innerHTML = `<span>✗ ${store.charAt(0).toUpperCase() + store.slice(1)}: Error</span>`;
+                completeSearchProgress(store, true);
             }
         });
 
         const stillLoading = Object.values(status).some(s => s === 'loading' || s === 'not_started');
         if (stillLoading) {
-            setTimeout(checkPreloadStatus, 600);
+            setTimeout(checkPreloadStatus, 500);
+        } else {
+            // Reset durations for search phase after preloading is done
+            searchProgressState.noon.duration = 7000;
+            searchProgressState.carrefour.duration = 10000;
         }
     } catch (error) {
         console.error('Error checking preload status:', error);
@@ -342,29 +338,92 @@ window.addEventListener('DOMContentLoaded', checkPreloadStatus);
 
 let searchStatusInterval = null;
 
+const searchProgressState = {
+    carrefour: { active: false, interval: null, startTime: null, duration: 10000 },
+    noon: { active: false, interval: null, startTime: null, duration: 7000 },
+    talabat: { active: false, interval: null, startTime: null, duration: 2000 }
+};
+
+function startSearchProgress(store) {
+    if (searchProgressState[store].active) return;
+
+    // Reset UI
+    const progressElem = document.getElementById(`progress-${store}`);
+    const labelElem = document.getElementById(`label-${store}`);
+    if (progressElem) progressElem.style.width = '0%';
+    if (labelElem) labelElem.textContent = 'Searching...';
+
+    // Start Animation
+    searchProgressState[store].active = true;
+    searchProgressState[store].startTime = Date.now();
+
+    clearInterval(searchProgressState[store].interval);
+    searchProgressState[store].interval = setInterval(() => {
+        const state = searchProgressState[store];
+        const elapsed = Date.now() - state.startTime;
+        const targetDuration = state.duration - 1000; // Reach 90% 1s before end
+
+        let percent = (elapsed / targetDuration) * 90;
+
+        if (percent > 90) percent = 90; // Hold at 90%
+        if (percent < 0) percent = 0;
+
+        const el = document.getElementById(`progress-${store}`);
+        if (el) el.style.width = `${percent}%`;
+
+    }, 100);
+}
+
+function completeSearchProgress(store, isError = false) {
+    const state = searchProgressState[store];
+    clearInterval(state.interval);
+    state.active = false;
+
+    const progressElem = document.getElementById(`progress-${store}`);
+    const labelElem = document.getElementById(`label-${store}`);
+    const cardElem = document.getElementById(`card-${store}`);
+
+    if (isError) {
+        if (progressElem) progressElem.style.width = '100%';
+        if (progressElem) progressElem.classList.add('bg-red-500');
+        if (labelElem) {
+            labelElem.textContent = 'Error';
+            labelElem.classList.add('text-red-500');
+        }
+    } else {
+        if (progressElem) progressElem.style.width = '100%';
+        if (progressElem) progressElem.classList.add('bg-green-500');
+        if (labelElem) {
+            labelElem.textContent = 'Ready';
+            labelElem.classList.add('text-green-600', 'font-bold');
+        }
+        if (cardElem) cardElem.classList.add('ring-2', 'ring-green-500', 'ring-offset-2');
+    }
+}
+
 function updateSearchStatusUI(status) {
     Object.keys(status).forEach(store => {
-        const statusElem = document.getElementById(`status-${store}`);
-        if (!statusElem) return;
-
         const state = status[store];
 
-        // Store-specific colors
-        const storeColors = {
-            carrefour: { loading: 'bg-blue-100 text-blue-800', ready: 'bg-blue-100 text-blue-800', spinner: 'border-blue-800' },
-            noon: { loading: 'bg-gray-100 text-gray-800', ready: 'bg-gray-100 text-gray-800', spinner: 'border-gray-800' },
-            talabat: { loading: 'bg-orange-100 text-orange-800', ready: 'bg-orange-100 text-orange-800', spinner: 'border-orange-800' }
-        };
-        const colors = storeColors[store] || storeColors.carrefour;
-
         if (state === 'searching') {
-            statusElem.className = `store-status flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium ${colors.loading}`;
-            statusElem.innerHTML = `<div class="w-4 h-4 border-2 ${colors.spinner} border-t-transparent rounded-full spinner"></div><span>${store.charAt(0).toUpperCase() + store.slice(1)}: Searching...</span>`;
+            startSearchProgress(store);
         } else if (state === 'complete' || state === 'ready') {
-            statusElem.className = `store-status flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium ${colors.ready}`;
-            statusElem.innerHTML = `<span>✓ ${store.charAt(0).toUpperCase() + store.slice(1)}: Ready</span>`;
+            completeSearchProgress(store, false);
+        } else if (state === 'error') {
+            completeSearchProgress(store, true);
+        } else if (state === 'loading') {
+            // Preload state - maybe just partial bar?
+            const label = document.getElementById(`label-${store}`);
+            if (label) label.textContent = 'Preloading...';
         }
     });
+
+    // Clean up if all complete
+    const allDone = Object.values(status).every(s => s === 'complete' || s === 'ready' || s === 'error');
+    if (allDone && searchStatusInterval) {
+        clearInterval(searchStatusInterval);
+        searchStatusInterval = null;
+    }
 }
 
 async function pollSearchStatus() {

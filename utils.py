@@ -53,7 +53,7 @@ def extract_quantity(product_name: str) -> Tuple[Optional[float], Optional[str]]
     # We want to match '500g', '500 g'.
     # For attached units (500g), we need to ensure the suffix is exactly the unit.
     
-    units_regex = r'(kg|kilograms|kilogram|g|grams|gram|l|litres|liters|litre|liter|ltr|ml|pcs|pieces|piece|pc|packs|pack|pck|m)'
+    units_regex = r'(kg|kilograms|kilogram|g|grams|gram|l|litres|liters|litre|liter|ltr|ml|pcs|pieces|piece|pc|packs|pack|pck|m|sqft|sq\.ft|sq\s*ft)\b'
     
     # We need a robust way to match units that distinguishes 'mm' from 'm'
     # Actually, 'm' is rarely used for 'ml'. It is used for 'meters' (foil). 
@@ -150,26 +150,12 @@ def extract_quantity(product_name: str) -> Tuple[Optional[float], Optional[str]]
                     return value, 'ml'
                 elif unit in ['pcs', 'piece', 'pieces', 'pc', 'pck', 'pack', 'packs']:
                     return value, 'pcs'
+                elif unit in ['sqft', 'sq.ft', 'sq ft']:
+                    return value, 'sqft'
                 return value, unit
             except (ValueError, IndexError):
                 continue
 
-    # Handling "Pack of X" or "X Pack" if no weight is found?
-    # User said "pack of 3".
-    # If product is "Soap Pack of 3", we want quantity?
-    # Maybe 3 count?
-    # Current function returns (value, unit). 
-    # If unit is 'pack', can we return (3, 'pack')?
-    pack_match = re.search(r'pack of (\d+)', product_name.lower())
-    if pack_match:
-        return float(pack_match.group(1)), 'pack'
-        
-    pack_match_2 = re.search(r'(\d+)\s*packs?', product_name.lower())
-    if pack_match_2:
-        # Check if it's not part of "2 packs x 500g" which would be caught above
-        # If we are here, strict multipack match failed.
-        return float(pack_match_2.group(1)), 'pack'
-    
     return None, None
 
 def normalize_quantity(value: float, unit: str) -> float:
@@ -202,7 +188,7 @@ def normalize_quantity(value: float, unit: str) -> float:
     
     return value
 
-def parse_products_with_ai(products: List[Dict], store_name: str, openrouter_api_key: str) -> List[Dict]:
+def parse_products_ai(products: List[Dict], store_name: str, openrouter_api_key: str) -> List[Dict]:
     """
     Step 1: Parse individual products to extract structured data (AI Version)
     
@@ -256,6 +242,10 @@ def parse_products_with_ai(products: List[Dict], store_name: str, openrouter_api
                 "model": model,
                 "messages": [{"role": "user", "content": prompt}],
                 "temperature": 0.1,
+                "reasoning": {
+                    "effort": 'low'
+                },
+                "max_output_tokens": 2000,
             }
         )
         
@@ -478,7 +468,7 @@ def group_parsed_products(parsed_products: List[Dict]) -> List[Dict]:
     return matched_groups
 
 
-def match_products_with_ai(store_results: Dict[str, Dict], openrouter_api_key: str, query: str = None) -> List[Dict]:
+def match_products(store_results: Dict[str, Dict], openrouter_api_key: str, query: str = None) -> List[Dict]:
     """
     Two-step product matching:
     1. Parse products (using Regex/Heuristics now)
@@ -505,6 +495,8 @@ def match_products_with_ai(store_results: Dict[str, Dict], openrouter_api_key: s
             if products:
                 try:
                     # Switch parsers here:
+                    # Option A: Use AI Parser
+                    # result = parse_products_ai(products, store_name, openrouter_api_key)
                     # Option B: Use Regex Parser (Default)
                     result = parse_products_regex(products, store_name)
                     

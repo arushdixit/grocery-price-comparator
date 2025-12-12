@@ -202,7 +202,7 @@ function renderMatchedProducts(matchedProducts, locations) {
                 if (u === 'g' || u === 'gram' || u === 'grams') {
                     baseQty = p.quantity_value / 1000;
                     baseUnit = 'kg';
-                } else if (u === 'ml' || u === 'm') {
+                } else if (u === 'ml') {
                     baseQty = p.quantity_value / 1000;
                     baseUnit = 'L';
                 } else if (u === 'kg' || u === 'kilogram') {
@@ -214,6 +214,12 @@ function renderMatchedProducts(matchedProducts, locations) {
                 } else if (['pack', 'packs', 'pcs', 'piece', 'pieces', 'pc'].includes(u)) {
                     baseQty = p.quantity_value;
                     baseUnit = 'pc';
+                } else if (u === 'm') {
+                    baseQty = p.quantity_value;
+                    baseUnit = 'm';
+                } else if (u === 'sqft' || u === 'sq ft' || u === 'sq.ft') {
+                    baseQty = p.quantity_value;
+                    baseUnit = 'sqft';
                 }
                 //console.log(baseQty, baseUnit);
             }

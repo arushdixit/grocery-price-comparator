@@ -14,7 +14,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from dotenv import load_dotenv
 
 # Import our custom modules
-from utils import match_products_with_ai, sort_products, parse_price
+from utils import match_products, sort_products, parse_price
 from database import save_product_and_prices, log_search, get_product_analytics, get_search_trends, get_price_history
 
 # Load environment variables
@@ -516,8 +516,8 @@ def match():
     openrouter_api_key = os.getenv('OPENROUTER_API_KEY')
     product_name = data.get('product_name', '')
     
-    # Match products across stores using AI
-    matched_products = match_products_with_ai(raw_results, openrouter_api_key, query=product_name)
+    # Match products across stores
+    matched_products = match_products(raw_results, openrouter_api_key, query=product_name)
     
     # Sort products
     ascending = (sort_order == 'asc')

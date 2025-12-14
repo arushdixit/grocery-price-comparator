@@ -11,6 +11,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from urllib.parse import urlparse
 from dotenv import load_dotenv
 
 # Import our custom modules
@@ -46,6 +47,12 @@ _search_status = {
     'talabat': 'ready'
 }
 
+# Detected locations cache
+_browser_locations = {
+    'carrefour': None,
+    'noon': None
+}
+
 def get_chrome_driver():
     """Create a new Chrome driver with standard options"""
     chrome_options = Options()
@@ -54,6 +61,14 @@ def get_chrome_driver():
     chrome_options.add_argument('--disable-dev-shm-usage')
     chrome_options.add_argument('--disable-blink-features=AutomationControlled')
     chrome_options.add_argument('user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+    
+    # OPTIMIZATION: Eager loading strategy (don't wait for all resources)
+    chrome_options.page_load_strategy = 'eager'
+    
+    # OPTIMIZATION: Disable images to save bandwidth
+    prefs = {"profile.managed_default_content_settings.images": 2}
+    chrome_options.add_experimental_option("prefs", prefs)
+    
     return webdriver.Chrome(options=chrome_options)
 
 def get_or_create_browser(store_name, base_url, cookies_file=None):
@@ -73,11 +88,16 @@ def get_or_create_browser(store_name, base_url, cookies_file=None):
     # Create new browser
     print(f"[{store_name}] Initializing new browser session...")
     driver = get_chrome_driver()
-    driver.get(base_url)
     
-    # Load cookies if provided
+    # OPTIMIZATION: Visit a lightweight page to set cookies before loading the heavy app
+    # This avoids loading the main application twice (once to set domain, once to apply cookies)
     if cookies_file and os.path.exists(cookies_file):
         try:
+            # Visit robots.txt to establish domain context quickly
+            parsed = urlparse(base_url)
+            domain_root = f"{parsed.scheme}://{parsed.netloc}"
+            driver.get(f"{domain_root}/robots.txt")
+            
             with open(cookies_file, 'r') as f:
                 cookies = json.load(f)
                 cookie_count = 0
@@ -90,8 +110,6 @@ def get_or_create_browser(store_name, base_url, cookies_file=None):
                             'path': cookie.get('path', '/'),
                             'secure': cookie.get('secure', False)
                         }
-                        if 'expirationDate' in cookie:
-                            selenium_cookie['expiry'] = int(cookie['expirationDate'])
                         driver.add_cookie(selenium_cookie)
                         cookie_count += 1
                     except:
@@ -99,9 +117,29 @@ def get_or_create_browser(store_name, base_url, cookies_file=None):
                 print(f"[{store_name}] Added {cookie_count} cookies")
         except Exception as e:
             print(f"[{store_name}] Error loading cookies: {str(e)}")
+            
+    # Navigate to the actual application (now with cookies applied)
+    driver.get(base_url)
     
     _browser_pool[store_name] = driver
     return driver, True  # True = newly created
+
+def detect_location(driver, store_name):
+    """Detect delivery location from the page header"""
+    try:
+        wait = WebDriverWait(driver, 5)
+        if store_name.lower() == 'carrefour':
+            location_elem = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "div.max-w-\\[250px\\].truncate, div.max-w-\\[220px\\].truncate")))
+            return location_elem.text.strip()
+        elif store_name.lower() == 'noon':
+            # Wait for ETA element to load, which confirms location-specific data is ready
+            # Selector targets the paragraph containing "minutes delivery"
+            wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "p[class*='estimate']")))
+            location_elem = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "span[class*='addressText']")))
+            return location_elem.text.strip()
+    except Exception as e:
+        print(f"[{store_name}] ⚠️  Could not detect location: {str(e)}")
+    return None
 
 def search_carrefour(item):
     """Search Carrefour UAE for item prices using Selenium"""
@@ -114,30 +152,30 @@ def search_carrefour(item):
         # Get or create persistent browser
         driver, is_new = get_or_create_browser('Carrefour', 'https://www.carrefouruae.com/mafuae/en/', CARREFOUR_COOKIES_FILE)
         
-        # Detect location only on first load
-        if is_new:
-            time.sleep(1)
-            try:
-                location_elem = driver.find_element(By.CSS_SELECTOR, "div.max-w-\\[250px\\].truncate, div.max-w-\\[220px\\].truncate")
-                location = location_elem.text.strip()
-                if location:
-                    print(f"[Carrefour] Detected location: {location}")
-                else:
-                    print("[Carrefour] ⚠️  Could not detect location")
-            except:
-                print("[Carrefour] ⚠️  Could not detect location - results may be for default area")
+        # Use cached location or detect if missing
+        if not _browser_locations.get('carrefour'):
+            _browser_locations['carrefour'] = detect_location(driver, 'Carrefour')
+        
+        location = _browser_locations.get('carrefour')
+        if location:
+            print(f"[Carrefour] Using location: {location}")
+        else:
+            print("[Carrefour] ⚠️  Location not found - results may be for default area")
         
         # Navigate to search URL
         url = f"https://www.carrefouruae.com/mafuae/en/search?keyword={item.replace(' ', '%20')}"
         driver.get(url)
         
         # Wait for products to load
-        wait = WebDriverWait(driver, 10)
-        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "div[class*='max-w-']")))
-        time.sleep(1)
+        wait = WebDriverWait(driver, 5) # Optimization: Fail fast (5s is enough for eager load)
+        try:
+            wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "div[class*='max-w-']")))
+            print("[Carrefour] Product elements detected")
+        except Exception as e:
+            print(f"[Carrefour] Timeout waiting for products: {str(e)}")
         
         # Parse with BeautifulSoup
-        soup = BeautifulSoup(driver.page_source, 'html.parser')
+        soup = BeautifulSoup(driver.page_source, 'lxml')
         products = []
         
         # Find product containers - using robust parent selector
@@ -241,15 +279,15 @@ def search_noon(item):
         driver, is_new = get_or_create_browser('Noon', 'https://minutes.noon.com/uae-en/', NOON_COOKIES_FILE)
         print(f"[Noon] Browser ready (new={is_new})")
         
-        # Detect location only on first load
-        if is_new:
-            time.sleep(1)
-            try:
-                location_elem = driver.find_element(By.CSS_SELECTOR, "span.AddressHeader_addressText__kMyss")
-                location = location_elem.text.strip()
-                print(f"[Noon] Detected location: {location}")
-            except:
-                print("[Noon] ⚠️  Could not detect location - results may be for default area")
+        # Use cached location or detect if missing
+        if not _browser_locations.get('noon'):
+            _browser_locations['noon'] = detect_location(driver, 'Noon')
+            
+        location = _browser_locations.get('noon')
+        if location:
+            print(f"[Noon] Using location: {location}")
+        else:
+            print("[Noon] ⚠️  Location not found - results may be for default area")
         
         # Navigate to search URL
         url = f"https://minutes.noon.com/uae-en/search/?q={item.replace(' ', '%20')}"
@@ -257,30 +295,33 @@ def search_noon(item):
         driver.get(url)
         
         # Wait for products to load (wait for product boxes)
+        # Wait for products to load (wait for product boxes)
         print("[Noon] Waiting for product elements...")
-        wait = WebDriverWait(driver, 15) # Increased timeout
+        wait = WebDriverWait(driver, 5) # Optimization: Fail fast (5s is enough for eager load)
         try:
-            wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".ProductBox-module-scss-module__urFZAa__imageSection")))
+            # Wait for EITHER products OR "no results" image
+            # This returns True as soon as one is found
+            wait.until(lambda d: 
+                d.find_elements(By.CSS_SELECTOR, "a[class*='ProductBox']") or 
+                d.find_elements(By.CSS_SELECTOR, "img[src*='no_res_wid']")
+            )
+            
+            # Check if it was the "no results" image that triggered it
+            if driver.find_elements(By.CSS_SELECTOR, "img[src*='no_res_wid']"):
+                print("[Noon] 'No results' banner detected - returning early")
+                _search_status['noon'] = 'complete'
+                return {'products': [{'name': 'No results found', 'price': 'N/A'}]}
+
             print("[Noon] Product elements detected")
         except Exception as e:
             print(f"[Noon] Timeout waiting for products: {str(e)}")
-            # debug - save screenshot
-            driver.save_screenshot('noon_debug.png')
-            print("[Noon] Saved debug screenshot to noon_debug.png")
-            with open('noon_debug.html', 'w') as f:
-                f.write(driver.page_source)
-            print("[Noon] Saved debug HTML to noon_debug.html")
 
-        
-        # Additional wait for dynamic content
-        time.sleep(2)
-        
+                
         # Parse with BeautifulSoup
-        soup = BeautifulSoup(driver.page_source, 'html.parser')
+        soup = BeautifulSoup(driver.page_source, 'lxml')
         products = []
         
         # Find single product items directly
-        # User HTML: <a class="ProductBox-module-scss-module__urFZAa__wrapper" ...>
         # We search for 'ProductBox' generally to be robust against hash changes
         product_boxes = soup.find_all('a', class_=lambda x: x and 'ProductBox' in str(x))
         print(f"[Noon] Found {len(product_boxes)} product boxes in DOM")
@@ -335,12 +376,7 @@ def search_noon(item):
         
         elapsed = time.time() - start_time
         print(f"[Noon] Completed in {elapsed:.2f}s - Found {len(products)} products")
-        if len(products) == 0:
-             print("[Noon] WARNING: 0 products found. Check selectors.")
-             driver.save_screenshot('noon_zero_results.png')
-             with open('noon_zero_results.html', 'w') as f:
-                f.write(driver.page_source)
-
+        
         _search_status['noon'] = 'complete'
         result = {'products': products if products else [{'name': 'No results found', 'price': 'N/A'}]}
         if location:
@@ -431,7 +467,6 @@ def search_talabat(item):
         print(f"[Talabat] Error in {elapsed:.2f}s - {str(e)}")
         _search_status['talabat'] = 'complete'
         return {'products': [{'name': f'Error: {str(e)}', 'price': 'N/A'}]}
-
 
 @app.route('/')
 def index():
@@ -565,7 +600,14 @@ def preload_single_browser(store_name, base_url, cookies_file):
     global _preload_status
     try:
         _preload_status[store_name.lower()] = 'loading'
-        get_or_create_browser(store_name, base_url, cookies_file)
+        driver, _ = get_or_create_browser(store_name, base_url, cookies_file)
+        
+        # Detect and cache location
+        location = detect_location(driver, store_name)
+        if location:
+            _browser_locations[store_name.lower()] = location
+            print(f"[{store_name}] Pre-detected location: {location}")
+            
         _preload_status[store_name.lower()] = 'ready'
         print(f"[Startup] {store_name} browser ready")
     except Exception as e:
@@ -607,4 +649,4 @@ if __name__ == '__main__':
         # Reloader subprocess - start preloading
         threading.Thread(target=preload_browsers, daemon=True).start()
     
-    app.run(host='0.0.0.0', port=9000)
+    app.run(debug=True, host='0.0.0.0', port=9000)

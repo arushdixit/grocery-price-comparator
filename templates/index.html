@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dubai Grocery Price Comparator</title>
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='logos/app_logo.png') }}">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -19,6 +20,13 @@
                         muted: '#eeeff2',
                         'text-primary': '#000000',
                         'text-muted': '#6b7280',
+                        // New tokens for header
+                        card: '#ffffff',
+                        foreground: '#0f172a',
+                        'muted-foreground': '#64748b'
+                    },
+                    boxShadow: {
+                        'card': '0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)'
                     }
                 }
             }
@@ -39,43 +47,56 @@
 
 <body class="bg-gray-100 min-h-screen">
     <!-- Navigation Bar -->
-    <nav class="bg-white shadow-md border-b border-gray-200">
-        <div class="max-w-7xl mx-auto px-4 py-4">
+    <!-- Navigation Bar -->
+    <header class="sticky top-0 z-50 bg-card border-b border-border shadow-card bg-white">
+        <div class="container mx-auto px-4 py-4">
             <div class="flex items-center justify-between">
-                <h1 class="text-2xl font-bold text-text-primary">🛒 Dubai Grocery Price Comparator</h1>
-                <div class="flex items-center gap-4">
-                    <span class="text-sm text-text-muted">Compare • Save • Shop Smart</span>
+                <div class="flex items-center gap-3">
+                    <img src="{{ url_for('static', filename='logos/app_logo.png') }}" alt="PriceHunt Logo"
+                        class="h-10 w-10 object-contain">
+                    <div>
+                        <h1 class="text-xl font-bold text-foreground">PriceHunt UAE</h1>
+                        <p class="text-xs text-muted-foreground">Compare prices across Dubai stores</p>
+                    </div>
                 </div>
+                <!-- Optional: Add responsive menu button here if needed -->
+                <!-- <button class="block md:hidden ...">Menu</button> -->
+                <button
+                    class="relative flex items-center gap-2 px-4 py-2.5 rounded-xl bg-secondary hover:bg-secondary/80 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        class="lucide lucide-shopping-cart w-5 h-5 text-foreground">
+                        <circle cx="8" cy="21" r="1"></circle>
+                        <circle cx="19" cy="21" r="1"></circle>
+                        <path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12">
+                        </path>
+                    </svg>
+                    <span class="font-medium text-foreground">Smart Basket</span>
+                </button>
             </div>
         </div>
-    </nav>
+    </header>
 
     <!-- Header Section -->
     <div class="max-w-4xl mx-auto px-4 py-8">
         <div class="bg-white rounded-2xl shadow-lg p-8 text-center">
-            <h2 class="text-3xl md:text-4xl font-bold text-text-primary mb-3">
-                Find the Best Grocery Prices
-            </h2>
-            <p class="text-text-muted text-lg mb-6">
-                Compare SKUs across Carrefour, Noon & Talabat by price and weight/volume
-            </p>
 
             <!-- Search Box -->
-            <div class="flex gap-3 mt-6">
-                <input type="text" id="searchInput"
-                    placeholder="Enter grocery item (e.g., bayara moong dal, milk, basmati rice)..."
+            <div class="flex flex-col sm:flex-row gap-3 mt-6">
+                <input type="text" id="searchInput" placeholder="Enter grocery item (e.g., milk, eggs, bread)..."
                     onkeypress="if(event.key==='Enter') searchGrocery()"
                     class="flex-1 px-4 py-3 text-base border-2 border-border rounded-xl outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/20">
                 <button id="searchBtn" onclick="searchGrocery()"
-                    class="px-8 py-3 bg-primary text-white font-semibold rounded-xl hover:bg-primary/90 active:scale-95 transition-all disabled:bg-gray-300 disabled:cursor-not-allowed whitespace-nowrap">
+                    class="w-full sm:w-auto px-8 py-3 bg-primary text-white font-semibold rounded-xl hover:bg-primary/90 active:scale-95 transition-all disabled:bg-gray-300 disabled:cursor-not-allowed whitespace-nowrap">
                     Search
                 </button>
             </div>
 
             <!-- Store Status -->
-            <div class="flex flex-wrap justify-center gap-4 mt-6 p-4 bg-gray-50/50 rounded-2xl border border-gray-100">
+            <div
+                class="grid grid-cols-2 md:flex md:flex-wrap md:justify-center gap-3 md:gap-4 mt-6 p-3 md:p-4 bg-gray-50/50 rounded-2xl border border-gray-100">
                 <!-- Carrefour -->
-                <div class="relative overflow-hidden flex flex-col justify-center bg-white border border-gray-200 rounded-xl w-40 h-24 shadow-sm transition-all"
+                <div class="relative overflow-hidden flex flex-col justify-center bg-white border border-gray-200 rounded-xl w-full md:w-40 h-20 shadow-sm transition-all"
                     id="card-carrefour">
                     <div class="absolute bottom-0 left-0 h-1.5 bg-blue-500 transition-all duration-300 ease-out"
                         style="width: 0%" id="progress-carrefour"></div>
@@ -87,7 +108,7 @@
                 </div>
 
                 <!-- Noon -->
-                <div class="relative overflow-hidden flex flex-col justify-center bg-white border border-gray-200 rounded-xl w-40 h-24 shadow-sm transition-all"
+                <div class="relative overflow-hidden flex flex-col justify-center bg-white border border-gray-200 rounded-xl w-full md:w-40 h-20 shadow-sm transition-all"
                     id="card-noon">
                     <div class="absolute bottom-0 left-0 h-1.5 bg-black transition-all duration-300 ease-out"
                         style="width: 0%" id="progress-noon"></div>
@@ -99,7 +120,7 @@
                 </div>
 
                 <!-- Talabat -->
-                <div class="relative overflow-hidden flex flex-col justify-center bg-white border border-gray-200 rounded-xl w-40 h-24 shadow-sm transition-all"
+                <div class="relative overflow-hidden flex flex-col justify-center bg-white border border-gray-200 rounded-xl w-full md:w-40 h-20 shadow-sm transition-all"
                     id="card-talabat">
                     <div class="absolute bottom-0 left-0 h-1.5 bg-[#ff5a00] transition-all duration-300 ease-out"
                         style="width: 0%" id="progress-talabat"></div>
@@ -107,6 +128,18 @@
                         <img src="{{ url_for('static', filename='logos/talabat.png') }}" alt="Talabat"
                             class="h-8 w-auto object-contain">
                         <span class="text-xs font-medium text-gray-500" id="label-talabat">Waiting...</span>
+                    </div>
+                </div>
+
+                <!-- Amazon -->
+                <div class="relative overflow-hidden flex flex-col justify-center bg-white border border-gray-200 rounded-xl w-full md:w-40 h-20 shadow-sm transition-all"
+                    id="card-amazon">
+                    <div class="absolute bottom-0 left-0 h-1.5 bg-[#FF9900] transition-all duration-300 ease-out"
+                        style="width: 0%" id="progress-amazon"></div>
+                    <div class="flex flex-col items-center gap-2 p-3">
+                        <img src="{{ url_for('static', filename='logos/amazon.png') }}" alt="Amazon"
+                            class="h-8 w-auto object-contain">
+                        <span class="text-xs font-medium text-gray-500" id="label-amazon">Waiting...</span>
                     </div>
                 </div>
             </div>
@@ -123,15 +156,15 @@
     </div>
 
     <!-- Main App Layout -->
-    <div class="flex gap-6 px-4 pb-8 max-w-[1800px] mx-auto items-start">
+    <div class="flex flex-col lg:flex-row gap-6 px-4 pb-8 max-w-[1800px] mx-auto items-start">
         <!-- Main Results Column -->
-        <div class="main-column hidden flex-1 max-w-[1296px] mx-auto" id="mainColumn">
-            <div class="flex flex-wrap justify-between items-center gap-4 mb-6">
+        <div class="main-column hidden flex-1 w-full max-w-[1296px] mx-auto" id="mainColumn">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
                 <h2 class="text-2xl font-bold text-text-primary">Matched Results</h2>
-                <div class="flex gap-3 items-center">
+                <div class="flex flex-wrap gap-3 items-center w-full sm:w-auto">
                     <!-- Sort Dropdown -->
                     <select id="sortOptions" onchange="matchProducts()"
-                        class="px-4 py-2 border border-border rounded-lg bg-white text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary">
+                        class="flex-1 sm:flex-none px-4 py-2 border border-border rounded-lg bg-white text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary">
                         <option value="price_asc">Price: Low to High</option>
                         <option value="price_desc">Price: High to Low</option>
                         <option value="name_asc">Name: A to Z</option>

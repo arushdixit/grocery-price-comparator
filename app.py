@@ -26,17 +26,20 @@ app = Flask(__name__)
 # Cookies files
 NOON_COOKIES_FILE = 'Cookies/noon_minutes.json'
 CARREFOUR_COOKIES_FILE = 'Cookies/carrefour.json'
+AMAZON_COOKIES_FILE = 'Cookies/amazon_now.json'
 
 # Persistent browser pool
 _browser_pool = {
     'carrefour': None,
-    'noon': None
+    'noon': None,
+    'amazon': None
 }
 
 # Browser preload status
 _preload_status = {
     'carrefour': 'not_started',  # not_started, loading, ready, error
     'noon': 'not_started',
+    'amazon': 'not_started',
     'talabat': 'ready'  # Talabat doesn't use Selenium
 }
 
@@ -44,13 +47,15 @@ _preload_status = {
 _search_status = {
     'carrefour': 'ready',  # ready, searching, complete
     'noon': 'ready',
+    'amazon': 'ready',
     'talabat': 'ready'
 }
 
 # Detected locations cache
 _browser_locations = {
     'carrefour': None,
-    'noon': None
+    'noon': None,
+    'amazon': None
 }
 
 def get_chrome_driver():
@@ -136,6 +141,10 @@ def detect_location(driver, store_name):
             # Selector targets the paragraph containing "minutes delivery"
             wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "p[class*='estimate']")))
             location_elem = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "span[class*='addressText']")))
+            return location_elem.text.strip()
+        elif store_name.lower() == 'amazon':
+            # Amazon location
+            location_elem = wait.until(EC.visibility_of_element_located((By.ID, "glow-ingress-line2")))
             return location_elem.text.strip()
     except Exception as e:
         print(f"[{store_name}] ⚠️  Could not detect location: {str(e)}")
@@ -391,6 +400,136 @@ def search_noon(item):
         _search_status['noon'] = 'complete'
         return {'products': [{'name': f'Error: {str(e)}', 'price': 'N/A'}]}
 
+def search_amazon(item):
+    """Search Amazon.ae (Fresh/Yalla) for item prices using Selenium"""
+    global _search_status
+    _search_status['amazon'] = 'searching'
+    start_time = time.time()
+    print(f"[Amazon] Starting search for '{item}'...")
+    location = None
+    try:
+        # Get or create persistent browser
+        print("[Amazon] Getting browser...")
+        # Amazon grocery homepage
+        driver, is_new = get_or_create_browser('Amazon', 'https://www.amazon.ae/fmc/storefront?almBrandId=sAuWWBROaG', AMAZON_COOKIES_FILE)
+        print(f"[Amazon] Browser ready (new={is_new})")
+        
+        # Use cached location or detect if missing
+        if not _browser_locations.get('amazon'):
+            _browser_locations['amazon'] = detect_location(driver, 'Amazon')
+            
+        location = _browser_locations.get('amazon')
+        if location:
+            print(f"[Amazon] Using location: {location}")
+        else:
+            print("[Amazon] ⚠️  Location not found - results may be for default area")
+        
+        # Navigate to search URL
+        # Construct search URL for Amazon Fresh/Yalla
+        # i=amazonyalla ensures we search within the grocery section
+        encoded_item = item.replace(' ', '+')
+        url = f"https://www.amazon.ae/s?k={encoded_item}&i=amazonyalla&ref=nb_sb_noss"
+        print(f"[Amazon] Navigating to {url}")
+        driver.get(url)
+        
+        # Wait for products to load
+        print("[Amazon] Waiting for product elements...")
+        wait = WebDriverWait(driver, 5)
+        try:
+            # Wait for any result item or no results indicator
+            wait.until(lambda d: 
+                d.find_elements(By.CSS_SELECTOR, "div.desktop-grid-content-view") or 
+                d.find_elements(By.XPATH, "//*[contains(text(), 'No results for')]")
+            )
+            
+            if driver.find_elements(By.XPATH, "//*[contains(text(), 'No results for')]"):
+                 print("[Amazon] 'No results' detected - returning early")
+                 _search_status['amazon'] = 'complete'
+                 return {'products': [{'name': 'No results found', 'price': 'N/A'}]}
+                 
+            print("[Amazon] Product elements detected")
+        except Exception as e:
+            print(f"[Amazon] Timeout waiting for products: {str(e)}")
+
+        # Parse with BeautifulSoup
+        soup = BeautifulSoup(driver.page_source, 'lxml')
+        products = []
+        
+        # Find product containers
+        # User specified: <div class="a-section a-spacing-base desktop-grid-content-view">
+        product_containers = soup.find_all('div', class_=lambda x: x and 'desktop-grid-content-view' in str(x))
+        print(f"[Amazon] Found {len(product_containers)} product containers in DOM")
+        
+        for container in product_containers[:40]:
+            try:
+                # 1. Product Title
+                # <h2 ... class="... a-text-normal"><span>TITLE</span></h2>
+                title_elem = container.find('h2', class_=lambda x: x and 'a-text-normal' in str(x))
+                if not title_elem:
+                    continue
+                
+                name = title_elem.get_text().strip()
+                
+                # 2. Price
+                # <span class="a-price"><span class="a-offscreen">AED 9.03</span>...</span>
+                price_elem = container.find('span', class_='a-price')
+                price_text = "N/A"
+                if price_elem:
+                    offscreen = price_elem.find('span', class_='a-offscreen')
+                    if offscreen:
+                        price_text = offscreen.get_text().strip()
+                    else:
+                        price_text = price_elem.get_text().strip()
+                
+                # Skip if no price
+                if not price_text or price_text == 'N/A':
+                    continue
+
+                # 3. Image
+                # <img class="s-image" src="...">
+                image_url = None
+                img_elem = container.find('img', class_='s-image')
+                if img_elem:
+                    image_url = img_elem.get('src')
+                    
+                # 4. Product URL
+                # <a ... href="...">
+                product_url = None
+                link_elem = container.find('a', class_=lambda x: x and 'a-link-normal' in str(x))
+                if link_elem:
+                    href = link_elem.get('href')
+                    if href:
+                        if href.startswith('/'):
+                            product_url = f"https://www.amazon.ae{href}"
+                        else:
+                            product_url = href
+                            
+                products.append({
+                    'name': name,
+                    'price': price_text,
+                    'image_url': image_url,
+                    'product_url': product_url
+                })
+                
+            except Exception as e:
+                # print(f"[Amazon] Parsing error for one item: {str(e)}")
+                continue
+                
+        elapsed = time.time() - start_time
+        print(f"[Amazon] Completed in {elapsed:.2f}s - Found {len(products)} products")
+        
+        _search_status['amazon'] = 'complete'
+        result = {'products': products if products else [{'name': 'No results found', 'price': 'N/A'}]}
+        if location:
+            result['location'] = location
+        return result
+
+    except Exception as e:
+        elapsed = time.time() - start_time
+        print(f"[Amazon] Error in {elapsed:.2f}s - {str(e)}")
+        _search_status['amazon'] = 'complete'
+        return {'products': [{'name': f'Error: {str(e)}', 'price': 'N/A'}]}
+
 def search_talabat(item):
     """Search Talabat for item prices via API"""
     global _search_status
@@ -533,17 +672,19 @@ def search():
         return jsonify({'error': 'Please enter an item to search'}), 400
     
     # Reset search status
-    _search_status = {'carrefour': 'ready', 'noon': 'ready', 'talabat': 'ready'}
+    _search_status = {'carrefour': 'ready', 'noon': 'ready', 'amazon': 'ready', 'talabat': 'ready'}
     
     # Search all stores in parallel for better performance
-    with ThreadPoolExecutor(max_workers=3) as executor:
+    with ThreadPoolExecutor(max_workers=4) as executor:
         carrefour_future = executor.submit(search_carrefour, item)
         noon_future = executor.submit(search_noon, item)
+        amazon_future = executor.submit(search_amazon, item)
         talabat_future = executor.submit(search_talabat, item)
         
         raw_results = {
             'carrefour': carrefour_future.result(),
             'noon': noon_future.result(),
+            'amazon': amazon_future.result(),
             'talabat': talabat_future.result()
         }
     
@@ -553,6 +694,7 @@ def search():
         'locations': {
             'carrefour': raw_results.get('carrefour', {}).get('location'),
             'noon': raw_results.get('noon', {}).get('location'),
+            'amazon': raw_results.get('amazon', {}).get('location'),
         }
     })
 
@@ -619,7 +761,7 @@ def preload_browsers():
     print("[Startup] Preloading browsers in parallel...")
     
     # Preload both browsers in parallel using ThreadPoolExecutor
-    with ThreadPoolExecutor(max_workers=2) as executor:
+    with ThreadPoolExecutor(max_workers=3) as executor:
         carrefour_future = executor.submit(
             preload_single_browser, 
             'Carrefour', 
@@ -632,10 +774,17 @@ def preload_browsers():
             'https://minutes.noon.com/uae-en/',
             NOON_COOKIES_FILE
         )
+        amazon_future = executor.submit(
+            preload_single_browser,
+            'Amazon',
+            'https://www.amazon.ae/fmc/storefront?almBrandId=sAuWWBROaG',
+            AMAZON_COOKIES_FILE
+        )
         
         # Wait for both to complete
         carrefour_future.result()
         noon_future.result()
+        amazon_future.result()
     
     print("[Startup] Browser preloading complete")
 

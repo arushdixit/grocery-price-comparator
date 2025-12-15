@@ -363,7 +363,7 @@ def match_products(store_results: Dict[str, Dict], openrouter_api_key: str, quer
         print("[Matcher] Parsing products sequentially using Python logic...")
         all_parsed = []
         
-        for store_name in ['carrefour', 'noon', 'talabat']:
+        for store_name in ['carrefour', 'noon', 'talabat', 'amazon']:
             products = store_results.get(store_name, {}).get('products', [])
             products = [p for p in products if 'Error' not in p.get('name', '') and p.get('name') != 'No results found']
             
@@ -528,7 +528,7 @@ def fallback_matching(store_results: Dict[str, Dict]) -> List[Dict]:
     all_products = []
     
     # Collect all products with store info
-    for store in ['carrefour', 'noon', 'talabat']:
+    for store in ['carrefour', 'noon', 'talabat', 'amazon']:
         products = store_results.get(store, {}).get('products', [])
         for product in products:
             if 'Error' not in product.get('name', '') and product.get('name') != 'No results found':

@@ -120,7 +120,7 @@ function renderMatchedProducts(matchedProducts, locations) {
         displayProducts.forEach(p => {
             const stores = p.stores || {};
             const prices = [];
-            ['carrefour', 'noon', 'talabat'].forEach(s => {
+            ['carrefour', 'noon', 'amazon', 'talabat'].forEach(s => {
                 const info = stores[s];
                 if (info && typeof info.price === 'number') {
                     prices.push({ store: s, price: info.price });
@@ -197,15 +197,16 @@ function renderMatchedProducts(matchedProducts, locations) {
             section += '</div>';
 
             // Bottom: Store Cards Grid
-            section += '<div class="grid grid-cols-1 md:grid-cols-3 gap-4">';
+            section += '<div class="grid grid-cols-1 md:grid-cols-4 gap-4">';
 
             const storeConfigs = {
                 carrefour: { name: 'Carrefour', logo: '/static/logos/carrefour.png', color: 'blue', initial: 'C' },
                 noon: { name: 'Noon', logo: '/static/logos/noon.png', color: 'gray', initial: 'N' },
+                amazon: { name: 'Amazon', logo: '/static/logos/amazon.png', color: 'orange', initial: 'A' },
                 talabat: { name: 'Talabat', logo: '/static/logos/talabat.png', color: 'orange', initial: 'T' }
             };
 
-            ['carrefour', 'noon', 'talabat'].forEach(store => {
+            ['amazon', 'carrefour', 'noon', 'talabat'].forEach(store => {
                 const info = stores[store];
                 const config = storeConfigs[store];
                 const isBest = bestStores.includes(store);
@@ -311,6 +312,7 @@ async function checkPreloadStatus() {
             // Update duration for preloading if needed
             if (store === 'noon') searchProgressState.noon.duration = 10000;
             if (store === 'carrefour') searchProgressState.carrefour.duration = 15000;
+            if (store === 'amazon') searchProgressState.amazon.duration = 12000;
             if (store === 'talabat') searchProgressState.talabat.duration = 2000; // Keep fast
 
             if (state === 'loading' || state === 'not_started') {
@@ -334,6 +336,7 @@ async function checkPreloadStatus() {
             // Reset durations for search phase after preloading is done
             searchProgressState.noon.duration = 7000;
             searchProgressState.carrefour.duration = 15000;
+            searchProgressState.amazon.duration = 12000;
         }
     } catch (error) {
         console.error('Error checking preload status:', error);
@@ -347,6 +350,7 @@ let searchStatusInterval = null;
 const searchProgressState = {
     carrefour: { active: false, interval: null, startTime: null, duration: 15000 },
     noon: { active: false, interval: null, startTime: null, duration: 7000 },
+    amazon: { active: false, interval: null, startTime: null, duration: 12000 },
     talabat: { active: false, interval: null, startTime: null, duration: 2000 }
 };
 
@@ -500,6 +504,9 @@ async function searchGrocery() {
         if (locations.noon) {
             parts.push(`Noon: ${locations.noon}`);
         }
+        if (locations.amazon) {
+            parts.push(`Amazon: ${locations.amazon}`);
+        }
         locationNote.textContent = parts.length ? `Search locations · ${parts.join(' · ')}` : '';
 
         locationNote.textContent = parts.length ? `Search locations · ${parts.join(' · ')}` : '';
@@ -594,6 +601,7 @@ function renderRawResults(rawData) {
     const stores = [
         { name: 'Carrefour', key: 'carrefour', className: 'carrefour' },
         { name: 'Noon', key: 'noon', className: 'noon' },
+        { name: 'Amazon', key: 'amazon', className: 'amazon' },
         { name: 'Talabat', key: 'talabat', className: 'talabat' }
     ];
 

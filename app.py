@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 
 # Import our custom modules
 from utils import match_products, sort_products, parse_price
-from database import save_product_and_prices, log_search, get_product_analytics, get_search_trends, get_price_history
+from database import save_search_results, get_price_history, get_all_tracked_products, get_price_comparison, get_product_by_name
 
 # Load environment variables
 load_dotenv()
@@ -618,26 +618,11 @@ def analytics():
 
 @app.route('/api/analytics/products')
 def analytics_products():
-    """Get product analytics data"""
+    """Get all tracked products with latest prices"""
     limit = request.args.get('limit', 100, type=int)
     try:
-        products = get_product_analytics(limit=limit)
-        return jsonify({
-            'products': [dict(row) for row in products]
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/analytics/trends')
-def analytics_trends():
-    """Get search trends"""
-    days = request.args.get('days', 7, type=int)
-    limit = request.args.get('limit', 20, type=int)
-    try:
-        trends = get_search_trends(days=days, limit=limit)
-        return jsonify({
-            'trends': [dict(row) for row in trends]
-        })
+        products = get_all_tracked_products(limit=limit)
+        return jsonify({'products': products})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -647,9 +632,30 @@ def analytics_price_history(product_id):
     days = request.args.get('days', 30, type=int)
     try:
         history = get_price_history(product_id, days=days)
-        return jsonify({
-            'history': [dict(row) for row in history]
-        })
+        return jsonify({'history': history})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/analytics/price-history-by-name')
+def analytics_price_history_by_name():
+    """Get price history for a product by its matched name"""
+    matched_name = request.args.get('name', '')
+    days = request.args.get('days', 30, type=int)
+    try:
+        product = get_product_by_name(matched_name)
+        if not product:
+            return jsonify({'history': [], 'product': None})
+        history = get_price_history(product['id'], days=days)
+        return jsonify({'history': history, 'product': product})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/analytics/comparison/<int:product_id>')
+def analytics_comparison(product_id):
+    """Get current price comparison across stores for a product"""
+    try:
+        comparison = get_price_comparison(product_id)
+        return jsonify(comparison)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -720,16 +726,15 @@ def match():
     ascending = (sort_order == 'asc')
     sorted_products = sort_products(matched_products, sort_by=sort_by, ascending=ascending)
     
-    # Save to database in background (P1 feature)
+    # Save to database in background (CDC Type 2 price tracking)
     try:
         if sorted_products:
             # Background task to avoid blocking response
             threading.Thread(
-                target=save_product_and_prices, 
+                target=save_search_results, 
                 args=(sorted_products,), 
                 daemon=True
             ).start()
-            # Don't log search here, already logged during initial search
     except Exception as e:
         print(f"[Database] Error saving to database: {str(e)}")
     

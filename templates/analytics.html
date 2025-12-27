@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Price Analytics - PriceHunt UAE</title>
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='logos/app_logo.png') }}">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#f97015',
+                        accent: '#27aa83',
+                        secondary: '#e8eaed',
+                        border: '#e2e4e9',
+                        card: '#ffffff',
+                        foreground: '#0f172a',
+                        'muted-foreground': '#64748b'
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+
+<body class="bg-gray-100 min-h-screen">
+    <!-- Navigation Bar -->
+    <header class="sticky top-0 z-50 bg-white border-b border-gray-200 shadow-sm">
+        <div class="container mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <a href="/" class="flex items-center gap-3 hover:opacity-80 transition-opacity">
+                        <img src="{{ url_for('static', filename='logos/app_logo.png') }}" alt="PriceHunt Logo"
+                            class="h-10 w-10 object-contain">
+                        <div>
+                            <h1 class="text-xl font-bold text-foreground">PriceHunt UAE</h1>
+                            <p class="text-xs text-muted-foreground">Price Analytics Dashboard</p>
+                        </div>
+                    </a>
+                </div>
+                <a href="/"
+                    class="px-4 py-2 text-sm bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors">
+                    ← Back to Search
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-4 py-8">
+        <!-- Stats Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+                <div class="text-sm text-gray-500 font-medium">Tracked Products</div>
+                <div class="text-3xl font-bold text-gray-900 mt-1" id="statsProducts">-</div>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+                <div class="text-sm text-gray-500 font-medium">Price Records</div>
+                <div class="text-3xl font-bold text-gray-900 mt-1" id="statsRecords">-</div>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+                <div class="text-sm text-gray-500 font-medium">Last Updated</div>
+                <div class="text-3xl font-bold text-gray-900 mt-1" id="statsTime">-</div>
+            </div>
+        </div>
+
+        <!-- Products Table -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div class="p-6 border-b border-gray-100">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <h2 class="text-xl font-bold text-gray-900">Tracked Products</h2>
+                    <input type="text" id="searchProducts" placeholder="Search products..."
+                        class="w-full sm:w-64 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary">
+                </div>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-gray-50 border-b border-gray-100">
+                        <tr>
+                            <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Product</th>
+                            <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Brand</th>
+                            <th
+                                class="text-center px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Carrefour</th>
+                            <th
+                                class="text-center px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Noon</th>
+                            <th
+                                class="text-center px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Amazon</th>
+                            <th
+                                class="text-center px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Talabat</th>
+                            <th
+                                class="text-center px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="productsTableBody" class="divide-y divide-gray-100">
+                        <tr>
+                            <td colspan="7" class="text-center py-8 text-gray-500">Loading products...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <!-- Price History Modal -->
+    <div id="priceHistoryModal"
+        class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
+            <div class="flex items-center justify-between p-4 border-b border-gray-100">
+                <div>
+                    <h3 class="text-lg font-bold text-gray-900" id="modalTitle">Price History</h3>
+                    <p class="text-sm text-gray-500">Last 30 days</p>
+                </div>
+                <button onclick="closeModal()"
+                    class="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 transition-colors">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
+                        </path>
+                    </svg>
+                </button>
+            </div>
+            <div class="p-6">
+                <div id="modalLoading" class="text-center py-8 text-gray-500">
+                    Loading...
+                </div>
+                <div id="modalContent" class="hidden">
+                    <canvas id="modalChart" height="200"></canvas>
+                    <div id="modalNoData" class="hidden text-center py-8 text-gray-500">
+                        No price history available yet.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let allProducts = [];
+        let modalChart = null;
+
+        // Load products on page load
+        document.addEventListener('DOMContentLoaded', loadProducts);
+
+        // Search filter
+        document.getElementById('searchProducts').addEventListener('input', filterProducts);
+
+        async function loadProducts() {
+            try {
+                const response = await fetch('/api/analytics/products?limit=200');
+                const data = await response.json();
+                allProducts = data.products || [];
+
+                // Update stats
+                document.getElementById('statsProducts').textContent = allProducts.length;
+                document.getElementById('statsTime').textContent = 'Now';
+
+                renderProducts(allProducts);
+            } catch (error) {
+                console.error('Error loading products:', error);
+                document.getElementById('productsTableBody').innerHTML =
+                    '<tr><td colspan="7" class="text-center py-8 text-red-500">Error loading products</td></tr>';
+            }
+        }
+
+        function filterProducts() {
+            const query = document.getElementById('searchProducts').value.toLowerCase();
+            const filtered = allProducts.filter(p =>
+                (p.normalized_name || '').toLowerCase().includes(query) ||
+                (p.brand || '').toLowerCase().includes(query)
+            );
+            renderProducts(filtered);
+        }
+
+        function renderProducts(products) {
+            const tbody = document.getElementById('productsTableBody');
+
+            if (products.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-gray-500">No products found. Search for products to start tracking prices.</td></tr>';
+                return;
+            }
+
+            let html = '';
+            products.forEach(p => {
+                const stores = p.stores || {};
+
+                html += `<tr class="hover:bg-gray-50 transition-colors">
+                    <td class="px-6 py-4">
+                        <div class="font-medium text-gray-900 max-w-xs truncate">${escapeHtml(p.normalized_name || '-')}</div>
+                        ${p.quantity_value ? `<div class="text-xs text-gray-500">${p.quantity_value} ${p.quantity_unit || ''}</div>` : ''}
+                    </td>
+                    <td class="px-6 py-4 text-gray-600">${escapeHtml(p.brand || '-')}</td>
+                    <td class="px-6 py-4 text-center">${formatPrice(stores.carrefour)}</td>
+                    <td class="px-6 py-4 text-center">${formatPrice(stores.noon)}</td>
+                    <td class="px-6 py-4 text-center">${formatPrice(stores.amazon)}</td>
+                    <td class="px-6 py-4 text-center">${formatPrice(stores.talabat)}</td>
+                    <td class="px-6 py-4 text-center">
+                        <button onclick="showHistory(${p.id}, '${escapeHtml(p.normalized_name || '').replace(/'/g, "\\'")}')" 
+                            class="px-3 py-1 text-xs bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors">
+                            View History
+                        </button>
+                    </td>
+                </tr>`;
+            });
+
+            tbody.innerHTML = html;
+        }
+
+        function formatPrice(price) {
+            if (price === undefined || price === null) {
+                return '<span class="text-gray-300">-</span>';
+            }
+            return `<span class="font-medium text-gray-900">AED ${parseFloat(price).toFixed(2)}</span>`;
+        }
+
+        async function showHistory(productId, productName) {
+            const modal = document.getElementById('priceHistoryModal');
+            const loading = document.getElementById('modalLoading');
+            const content = document.getElementById('modalContent');
+            const noData = document.getElementById('modalNoData');
+            const title = document.getElementById('modalTitle');
+
+            modal.classList.remove('hidden');
+            loading.classList.remove('hidden');
+            content.classList.add('hidden');
+            title.textContent = productName;
+
+            if (modalChart) {
+                modalChart.destroy();
+                modalChart = null;
+            }
+
+            try {
+                const response = await fetch(`/api/analytics/price-history/${productId}?days=30`);
+                const data = await response.json();
+
+                loading.classList.add('hidden');
+                content.classList.remove('hidden');
+
+                if (!data.history || data.history.length === 0) {
+                    noData.classList.remove('hidden');
+                    document.getElementById('modalChart').style.display = 'none';
+                    return;
+                }
+
+                document.getElementById('modalChart').style.display = 'block';
+                noData.classList.add('hidden');
+                renderChart(data.history);
+            } catch (error) {
+                console.error('Error fetching history:', error);
+                loading.classList.add('hidden');
+                content.classList.remove('hidden');
+                noData.classList.remove('hidden');
+            }
+        }
+
+        function renderChart(history) {
+            const storeData = {};
+            const allDates = new Set();
+
+            history.forEach(item => {
+                const store = item.store_name;
+                const date = item.effective_date;
+                if (!storeData[store]) storeData[store] = {};
+                storeData[store][date] = item.price;
+                allDates.add(date);
+            });
+
+            const sortedDates = Array.from(allDates).sort();
+
+            const storeColors = {
+                carrefour: { border: 'rgb(59, 130, 246)' },
+                noon: { border: 'rgb(17, 24, 39)' },
+                amazon: { border: 'rgb(255, 153, 0)' },
+                talabat: { border: 'rgb(255, 90, 0)' }
+            };
+
+            const datasets = Object.keys(storeData).map(store => ({
+                label: store.charAt(0).toUpperCase() + store.slice(1),
+                data: sortedDates.map(date => storeData[store][date] || null),
+                borderColor: (storeColors[store] || {}).border || 'rgb(156, 163, 175)',
+                tension: 0.3,
+                fill: false,
+                spanGaps: true,
+                pointRadius: 4
+            }));
+
+            const labels = sortedDates.map(date => {
+                const d = new Date(date);
+                return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+            });
+
+            const ctx = document.getElementById('modalChart').getContext('2d');
+            modalChart = new Chart(ctx, {
+                type: 'line',
+                data: { labels, datasets },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { position: 'bottom' }
+                    },
+                    scales: {
+                        y: {
+                            ticks: {
+                                callback: v => 'AED ' + v.toFixed(2)
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function closeModal() {
+            document.getElementById('priceHistoryModal').classList.add('hidden');
+            if (modalChart) {
+                modalChart.destroy();
+                modalChart = null;
+            }
+        }
+
+        function escapeHtml(str) {
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        // Close modal on escape
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') closeModal();
+        });
+
+        // Close modal on backdrop click
+        document.getElementById('priceHistoryModal').addEventListener('click', e => {
+            if (e.target === e.currentTarget) closeModal();
+        });
+    </script>
+</body>
+
+</html>

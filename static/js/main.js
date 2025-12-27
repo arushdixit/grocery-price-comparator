@@ -264,6 +264,15 @@ function renderMatchedProducts(matchedProducts, locations) {
                     section += `</div>`;
                 }
 
+                // Price History Button
+                const escapedName = escapeHtml(p.matched_name || '').replace(/'/g, "\\'");
+                section += `<button onclick="showPriceHistory('${escapedName}')" class="mt-3 w-full text-xs px-2 py-1.5 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-primary transition-colors flex items-center justify-center gap-1">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                    </svg>
+                    Price History
+                </button>`;
+
                 section += '</div>';
             } else {
                 // Empty state for right column if no prices
@@ -693,3 +702,167 @@ function escapeHtml(str) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
 }
+
+
+// ==================== PRICE HISTORY MODAL ====================
+
+let priceHistoryChart = null;
+
+function showPriceHistory(productName) {
+    const modal = document.getElementById('priceHistoryModal');
+    const loading = document.getElementById('priceHistoryLoading');
+    const content = document.getElementById('priceHistoryContent');
+    const noData = document.getElementById('priceHistoryNoData');
+    const title = document.getElementById('priceHistoryTitle');
+
+    // Show modal with loading state
+    modal.classList.remove('hidden');
+    loading.classList.remove('hidden');
+    content.classList.add('hidden');
+    noData.classList.add('hidden');
+    title.textContent = productName;
+
+    // Destroy existing chart if any
+    if (priceHistoryChart) {
+        priceHistoryChart.destroy();
+        priceHistoryChart = null;
+    }
+
+    // Fetch price history
+    fetch(`/api/analytics/price-history-by-name?name=${encodeURIComponent(productName)}&days=30`)
+        .then(response => response.json())
+        .then(data => {
+            loading.classList.add('hidden');
+            content.classList.remove('hidden');
+
+            if (!data.history || data.history.length === 0) {
+                noData.classList.remove('hidden');
+                document.getElementById('priceHistoryChart').style.display = 'none';
+                return;
+            }
+
+            document.getElementById('priceHistoryChart').style.display = 'block';
+            noData.classList.add('hidden');
+            renderPriceHistoryChart(data.history);
+        })
+        .catch(error => {
+            console.error('Error fetching price history:', error);
+            loading.classList.add('hidden');
+            content.classList.remove('hidden');
+            noData.classList.remove('hidden');
+        });
+}
+
+function closePriceHistoryModal() {
+    const modal = document.getElementById('priceHistoryModal');
+    modal.classList.add('hidden');
+
+    if (priceHistoryChart) {
+        priceHistoryChart.destroy();
+        priceHistoryChart = null;
+    }
+}
+
+function renderPriceHistoryChart(history) {
+    // Group by store and date
+    const storeData = {};
+    const allDates = new Set();
+
+    history.forEach(item => {
+        const store = item.store_name;
+        const date = item.effective_date;
+
+        if (!storeData[store]) {
+            storeData[store] = {};
+        }
+        storeData[store][date] = item.price;
+        allDates.add(date);
+    });
+
+    // Sort dates
+    const sortedDates = Array.from(allDates).sort();
+
+    // Store colors
+    const storeColors = {
+        carrefour: { bg: 'rgba(59, 130, 246, 0.1)', border: 'rgb(59, 130, 246)' },
+        noon: { bg: 'rgba(17, 24, 39, 0.1)', border: 'rgb(17, 24, 39)' },
+        amazon: { bg: 'rgba(255, 153, 0, 0.1)', border: 'rgb(255, 153, 0)' },
+        talabat: { bg: 'rgba(255, 90, 0, 0.1)', border: 'rgb(255, 90, 0)' }
+    };
+
+    // Build datasets
+    const datasets = Object.keys(storeData).map(store => {
+        const colors = storeColors[store] || { bg: 'rgba(156, 163, 175, 0.1)', border: 'rgb(156, 163, 175)' };
+        return {
+            label: store.charAt(0).toUpperCase() + store.slice(1),
+            data: sortedDates.map(date => storeData[store][date] || null),
+            borderColor: colors.border,
+            backgroundColor: colors.bg,
+            tension: 0.3,
+            fill: false,
+            spanGaps: true,
+            pointRadius: 4,
+            pointHoverRadius: 6
+        };
+    });
+
+    // Format dates for display
+    const labels = sortedDates.map(date => {
+        const d = new Date(date);
+        return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    });
+
+    const ctx = document.getElementById('priceHistoryChart').getContext('2d');
+    priceHistoryChart = new Chart(ctx, {
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            interaction: {
+                intersect: false,
+                mode: 'index'
+            },
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        usePointStyle: true,
+                        padding: 20
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function (context) {
+                            return `${context.dataset.label}: AED ${context.parsed.y?.toFixed(2) || 'N/A'}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: false,
+                    ticks: {
+                        callback: function (value) {
+                            return 'AED ' + value.toFixed(2);
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Close modal on escape key
+document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+        closePriceHistoryModal();
+    }
+});
+
+// Close modal on backdrop click
+document.getElementById('priceHistoryModal')?.addEventListener('click', function (e) {
+    if (e.target === this) {
+        closePriceHistoryModal();
+    }
+});

@@ -7,6 +7,7 @@
     <title>Dubai Grocery Price Comparator</title>
     <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='logos/app_logo.png') }}">
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
         tailwind.config = {
             theme: {
@@ -190,6 +191,45 @@
             </div>
             <div class="text-sm text-text-muted mb-4" id="locationNote"></div>
             <div id="rawResults" class="flex flex-col gap-4"></div>
+        </div>
+    </div>
+
+    <!-- Price History Modal -->
+    <div id="priceHistoryModal"
+        class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
+            <div class="flex items-center justify-between p-4 border-b border-gray-100">
+                <div>
+                    <h3 class="text-lg font-bold text-gray-900" id="priceHistoryTitle">Price History</h3>
+                    <p class="text-sm text-gray-500" id="priceHistorySubtitle">Last 30 days</p>
+                </div>
+                <button onclick="closePriceHistoryModal()"
+                    class="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 transition-colors">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
+                        </path>
+                    </svg>
+                </button>
+            </div>
+            <div class="p-6">
+                <div id="priceHistoryLoading" class="text-center py-8 text-gray-500">
+                    <svg class="animate-spin h-8 w-8 mx-auto text-primary mb-2" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
+                        </circle>
+                        <path class="opacity-75" fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                        </path>
+                    </svg>
+                    Loading price history...
+                </div>
+                <div id="priceHistoryContent" class="hidden">
+                    <canvas id="priceHistoryChart" height="200"></canvas>
+                    <div id="priceHistoryNoData" class="hidden text-center py-8 text-gray-500">
+                        <p>No price history available for this product yet.</p>
+                        <p class="text-sm">Prices are recorded when you search for products.</p>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 

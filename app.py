@@ -16,7 +16,10 @@ from dotenv import load_dotenv
 
 # Import our custom modules
 from utils import match_products, sort_products, parse_price
-from database import save_search_results, get_price_history, get_all_tracked_products, get_price_comparison, get_product_by_name
+from database import (
+    save_search_results, get_price_history, get_all_tracked_products, 
+    get_price_comparison, get_product_by_name, get_db_stats
+)
 
 # Load environment variables
 load_dotenv()
@@ -615,6 +618,15 @@ def index():
 def analytics():
     """Analytics dashboard page"""
     return render_template('analytics.html')
+
+@app.route('/api/analytics/stats')
+def analytics_stats():
+    """Get overall database statistics"""
+    try:
+        stats = get_db_stats()
+        return jsonify(stats)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/analytics/products')
 def analytics_products():

@@ -88,16 +88,16 @@
                                 Brand</th>
                             <th
                                 class="text-center px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Carrefour</th>
+                                Carrefour <span class="block text-[10px] text-gray-400 capitalize">Current</span></th>
                             <th
                                 class="text-center px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Noon</th>
+                                Noon <span class="block text-[10px] text-gray-400 capitalize">Current</span></th>
                             <th
                                 class="text-center px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Amazon</th>
+                                Amazon <span class="block text-[10px] text-gray-400 capitalize">Current</span></th>
                             <th
                                 class="text-center px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Talabat</th>
+                                Talabat <span class="block text-[10px] text-gray-400 capitalize">Current</span></th>
                             <th
                                 class="text-center px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
                                 Actions</th>
@@ -156,13 +156,22 @@
 
         async function loadProducts() {
             try {
-                const response = await fetch('/api/analytics/products?limit=200');
-                const data = await response.json();
-                allProducts = data.products || [];
+                // Fetch Stats
+                fetch('/api/analytics/stats')
+                    .then(res => res.json())
+                    .then(stats => {
+                        document.getElementById('statsProducts').textContent = stats.product_count;
+                        document.getElementById('statsRecords').textContent = stats.price_count;
+                        document.getElementById('statsTime').textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    });
 
-                // Update stats
-                document.getElementById('statsProducts').textContent = allProducts.length;
-                document.getElementById('statsTime').textContent = 'Now';
+                const response = await fetch('/api/analytics/products?limit=500');
+                const data = await response.json();
+
+                // Default Sort A-Z by name
+                allProducts = (data.products || []).sort((a, b) =>
+                    (a.normalized_name || '').localeCompare(b.normalized_name || '')
+                );
 
                 renderProducts(allProducts);
             } catch (error) {

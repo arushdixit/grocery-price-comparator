@@ -242,6 +242,22 @@ def get_price_history(product_id: int, days: int = 30) -> List[Dict]:
         return [dict(row) for row in cursor.fetchall()]
 
 
+def get_db_stats() -> Dict[str, int]:
+    """Get total counts for products and price history records"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM products")
+        product_count = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(*) FROM price_history")
+        price_count = cursor.fetchone()[0]
+        
+        return {
+            'product_count': product_count,
+            'price_count': price_count
+        }
+
+
 def get_product_by_name(matched_name: str) -> Optional[Dict]:
     """Get product by its normalized/matched name"""
     with get_db_connection() as conn:

@@ -3,7 +3,6 @@ import re
 import os
 import requests
 import json
-import difflib
 from typing import List, Dict, Optional, Tuple
 
 def parse_price(price_str: str) -> Optional[float]:
@@ -161,6 +160,55 @@ def normalize_quantity(value: float, unit: str) -> float:
     
     return value
 
+def jaccard_similarity(name1: str, name2: str) -> float:
+    """
+    Calculate order-independent word similarity using Jaccard index.
+    Strips quantity information before comparison to focus on product identity.
+    
+    Args:
+        name1: First product name
+        name2: Second product name
+    
+    Returns:
+        Jaccard similarity score (0.0 to 1.0)
+    """
+    # Patterns to remove quantity-related tokens (numbers with units)
+    # Order matters: more specific patterns first
+    qty_patterns = [
+        # Combined multipack: 6x330ml, 330mlx6, 6 x 330 ml
+        r'\d+\.?\d*\s*[xX]\s*\d+\.?\d*\s*(kg|g|l|ml|ltr)?\b',
+        r'\d+\.?\d*\s*(kg|g|l|ml|ltr)\s*[xX]\s*\d+\.?\d*\b',
+        # Standard: 500ml, 1.5kg, 1 L, etc.
+        r'\d+\.?\d*\s*(kg|kilograms?|g|grams?|l|ltr|litres?|liters?|ml|pcs|pieces?|pc|packs?|pck|sqft|sq\\.?\\s*ft)\b',
+        # Standalone numbers that look like quantities (e.g., "x6", "x 12")
+        r'\b[xX]\s*\d+\b',
+        # Pack descriptions
+        r'\b(pack of|set of|box of)\s*\d+\b',
+    ]
+    
+    clean1 = name1.lower()
+    clean2 = name2.lower()
+    
+    for pattern in qty_patterns:
+        clean1 = re.sub(pattern, ' ', clean1)
+        clean2 = re.sub(pattern, ' ', clean2)
+    
+    # Remove special characters and extra spaces
+    clean1 = re.sub(r'[^a-z0-9\\s]', ' ', clean1)
+    clean2 = re.sub(r'[^a-z0-9\\s]', ' ', clean2)
+    
+    # Create word sets (filtering out empty strings)
+    tokens1 = set(w for w in clean1.split() if w)
+    tokens2 = set(w for w in clean2.split() if w)
+    
+    if not tokens1 or not tokens2:
+        return 0.0
+    
+    intersection = tokens1 & tokens2
+    union = tokens1 | tokens2
+    
+    return len(intersection) / len(union) if union else 0.0
+
 def parse_products_regex(products: List[Dict], store_name: str) -> List[Dict]:
     """
     Step 1: Parse individual products to extract structured data using Regex/Heuristics
@@ -253,7 +301,7 @@ def group_parsed_products(parsed_products: List[Dict]) -> List[Dict]:
     for key, items in buckets.items():
         # Determine strictness based on whether brand is known
         brand_known = key[0] != "unknown"
-        threshold = 0.9 # High threshold to avoid grouping different products
+        threshold = 0.8 # Jaccard threshold (0.8 = 80% word overlap required)
         
         # Simple clustering
         clusters = []
@@ -266,16 +314,16 @@ def group_parsed_products(parsed_products: List[Dict]) -> List[Dict]:
             current_cluster = [items[i]]
             processed_indexes.add(i)
             
-            base_name = items[i].get('original_name', '').lower()
+            base_name = items[i].get('original_name', '')
             
             for j in range(i + 1, len(items)):
                 if j in processed_indexes:
                     continue
                 
-                compare_name = items[j].get('original_name', '').lower()
+                compare_name = items[j].get('original_name', '')
                 
-                # Check similarity
-                ratio = difflib.SequenceMatcher(None, base_name, compare_name).ratio()
+                # Check similarity using Jaccard (order-independent word matching)
+                ratio = jaccard_similarity(base_name, compare_name)
                 
                 if ratio >= threshold:
                     current_cluster.append(items[j])

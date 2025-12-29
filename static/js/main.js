@@ -227,9 +227,9 @@ function renderMatchedProducts(matchedProducts, locations) {
                     // Trend Indicator
                     const trend = (p.trends || {})[store];
                     if (trend === 'up') {
-                        section += `<span class="text-[10px] text-red-500 font-bold flex items-center gap-0.5" title="Price increased">📈</span>`;
+                        section += `<span class="text-[14px] text-red-500 font-bold flex items-center gap-0.5" title="Price increased" onclick="showPriceHistory(${p.product_id}, '${escapeHtml((p.normalized_name || '').replace(/'/g, "\\'"))}')">🔺</span>`;
                     } else if (trend === 'down') {
-                        section += `<span class="text-[10px] text-green-500 font-bold flex items-center gap-0.5" title="Price halved/dropped!">📉</span>`;
+                        section += `<span class="text-[14px] text-green-500 font-bold flex items-center gap-0.5" title="Price halved/dropped!" onclick="showPriceHistory(${p.product_id}, '${escapeHtml((p.normalized_name || '').replace(/'/g, "\\'"))}')">🥬</span>`;
                     }
                     section += '</div>';
 

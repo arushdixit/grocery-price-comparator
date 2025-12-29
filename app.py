@@ -631,7 +631,7 @@ def analytics_stats():
 @app.route('/api/analytics/products')
 def analytics_products():
     """Get all tracked products with latest prices"""
-    limit = request.args.get('limit', 100, type=int)
+    limit = request.args.get('limit', type=int)  # Defaults to None if not provided
     try:
         products = get_all_tracked_products(limit=limit)
         return jsonify({'products': products})

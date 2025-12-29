@@ -270,14 +270,15 @@ def get_product_by_name(matched_name: str) -> Optional[Dict]:
         return dict(row) if row else None
 
 
-def get_all_tracked_products(limit: int = 100) -> List[Dict]:
+def get_all_tracked_products(limit: Optional[int] = None) -> List[Dict]:
     """
     Get all tracked products with their latest prices from each store.
     For analytics dashboard.
     """
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute('''
+        
+        query = '''
             SELECT 
                 p.id,
                 p.normalized_name,
@@ -292,9 +293,14 @@ def get_all_tracked_products(limit: int = 100) -> List[Dict]:
                     WHERE sp2.product_id = p.id
                 ) as current_prices
             FROM products p
-            ORDER BY p.id DESC
-            LIMIT ?
-        ''', (limit,))
+            ORDER BY p.normalized_name ASC
+        '''
+        
+        if limit is not None:
+            query += f" LIMIT {int(limit)}"
+            cursor.execute(query)
+        else:
+            cursor.execute(query)
         
         results = []
         for row in cursor.fetchall():

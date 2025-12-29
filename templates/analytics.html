@@ -165,7 +165,7 @@
                         document.getElementById('statsTime').textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                     });
 
-                const response = await fetch('/api/analytics/products?limit=500');
+                const response = await fetch('/api/analytics/products');
                 const data = await response.json();
 
                 // Default Sort A-Z by name
@@ -213,7 +213,7 @@
                     <td class="px-6 py-4 text-center">${formatPrice(stores.amazon)}</td>
                     <td class="px-6 py-4 text-center">${formatPrice(stores.talabat)}</td>
                     <td class="px-6 py-4 text-center">
-                        <button onclick="showHistory(${p.id}, '${escapeHtml(p.normalized_name || '').replace(/'/g, "\\'")}')" 
+                        <button onclick="showHistory(${p.id}, '${escapeHtml((p.normalized_name || '').replace(/'/g, "\\'"))}')" 
                             class="px-3 py-1 text-xs bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors">
                             View History
                         </button>

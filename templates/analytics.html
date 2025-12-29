@@ -198,6 +198,27 @@
                     </tbody>
                 </table>
             </div>
+
+            <!-- Pagination Controls -->
+            <div id="paginationControls" class="px-6 py-4 border-t border-gray-100 flex items-center justify-between">
+                <div class="text-sm text-gray-600">
+                    Showing <span id="pageStart">0</span> to <span id="pageEnd">0</span> of <span
+                        id="totalItems">0</span> products
+                </div>
+                <div class="flex items-center gap-2">
+                    <button id="prevPageBtn" onclick="prevPage()"
+                        class="px-3 py-1 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled>
+                        Previous
+                    </button>
+                    <span id="pageInfo" class="text-sm text-gray-600 px-3">Page 1 of 1</span>
+                    <button id="nextPageBtn" onclick="nextPage()"
+                        class="px-3 py-1 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled>
+                        Next
+                    </button>
+                </div>
+            </div>
         </div>
     </main>
 
@@ -234,6 +255,9 @@
 
     <script>
         let allProducts = [];
+        let filteredProducts = [];
+        let currentPage = 1;
+        const itemsPerPage = 500;
         let modalChart = null;
 
         // Load products on page load
@@ -268,8 +292,9 @@
                 allProducts = (data.products || []).sort((a, b) =>
                     (a.normalized_name || '').localeCompare(b.normalized_name || '')
                 );
+                filteredProducts = allProducts;
 
-                renderProducts(allProducts);
+                renderProducts();
             } catch (error) {
                 console.error('Error loading products:', error);
                 document.getElementById('productsTableBody').innerHTML =
@@ -279,23 +304,33 @@
 
         function filterProducts() {
             const query = document.getElementById('searchProducts').value.toLowerCase();
-            const filtered = allProducts.filter(p =>
+            filteredProducts = allProducts.filter(p =>
                 (p.normalized_name || '').toLowerCase().includes(query) ||
                 (p.brand || '').toLowerCase().includes(query)
             );
-            renderProducts(filtered);
+            currentPage = 1; // Reset to first page on filter
+            renderProducts();
         }
 
-        function renderProducts(products) {
+        function renderProducts() {
             const tbody = document.getElementById('productsTableBody');
+            const products = filteredProducts.length > 0 || document.getElementById('searchProducts').value ? filteredProducts : allProducts;
 
             if (products.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-gray-500">No products found. Search for products to start tracking prices.</td></tr>';
+                updatePaginationUI(0, 0, 0);
                 return;
             }
 
+            // Calculate pagination bounds
+            const totalItems = products.length;
+            const totalPages = Math.ceil(totalItems / itemsPerPage);
+            const startIdx = (currentPage - 1) * itemsPerPage;
+            const endIdx = Math.min(startIdx + itemsPerPage, totalItems);
+            const pageProducts = products.slice(startIdx, endIdx);
+
             let html = '';
-            products.forEach(p => {
+            pageProducts.forEach(p => {
                 const stores = p.stores || {};
 
                 html += `<tr class="hover:bg-gray-50 transition-colors">
@@ -318,6 +353,35 @@
             });
 
             tbody.innerHTML = html;
+            updatePaginationUI(startIdx + 1, endIdx, totalItems);
+        }
+
+        function updatePaginationUI(start, end, total) {
+            document.getElementById('pageStart').textContent = start;
+            document.getElementById('pageEnd').textContent = end;
+            document.getElementById('totalItems').textContent = total;
+
+            const totalPages = Math.ceil(total / itemsPerPage);
+            document.getElementById('pageInfo').textContent = `Page ${currentPage} of ${totalPages}`;
+
+            document.getElementById('prevPageBtn').disabled = currentPage <= 1;
+            document.getElementById('nextPageBtn').disabled = currentPage >= totalPages;
+        }
+
+        function prevPage() {
+            if (currentPage > 1) {
+                currentPage--;
+                renderProducts();
+            }
+        }
+
+        function nextPage() {
+            const products = filteredProducts.length > 0 || document.getElementById('searchProducts').value ? filteredProducts : allProducts;
+            const totalPages = Math.ceil(products.length / itemsPerPage);
+            if (currentPage < totalPages) {
+                currentPage++;
+                renderProducts();
+            }
         }
 
         function formatPrice(price) {

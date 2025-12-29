@@ -361,6 +361,46 @@ def get_price_comparison(product_id: int) -> Dict:
         return result
 
 
+def get_price_trends(product_id: int) -> Dict[str, str]:
+    """
+    Compare current prices with previous prices to determine trends.
+    Returns a dict of {store_name: 'up'|'down'|'stable'|'new'}
+    """
+    trends = {}
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Get all store products for this product
+            cursor.execute('SELECT id, store_name FROM store_products WHERE product_id = ?', (product_id,))
+            rows = cursor.fetchall()
+            
+            for sp_id, store_name in rows:
+                # Get last two distinct prices
+                cursor.execute('''
+                    SELECT price FROM price_history 
+                    WHERE store_product_id = ? 
+                    ORDER BY effective_date DESC, created_at DESC 
+                    LIMIT 2
+                ''', (sp_id,))
+                prices = [r[0] for r in cursor.fetchall()]
+                
+                if len(prices) >= 2:
+                    curr, prev = prices[0], prices[1]
+                    if curr < prev:
+                        trends[store_name] = 'down'
+                    elif curr > prev:
+                        trends[store_name] = 'up'
+                    else:
+                        trends[store_name] = 'stable'
+                else:
+                    trends[store_name] = 'new'
+    except Exception as e:
+        print(f"Error fetching trends: {e}")
+                
+    return trends
+
+
 # Initialize database on import
 if not os.path.exists(DB_PATH):
     init_database()

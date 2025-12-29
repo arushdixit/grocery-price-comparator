@@ -5,6 +5,130 @@ import requests
 import json
 from typing import List, Dict, Optional, Tuple
 
+# PRODUCT CATEGORY MAPPING
+# Loaded from categories.json for easier management
+def load_category_config():
+    config_path = os.path.join(os.path.dirname(__file__), 'categories.json')
+    defaults = {
+        "CATEGORIES": {
+            "Fresh Produce": ["onion", "potato", "tomato", "carrot", "apple", "banana", "garlic"],
+            "Dairy & Eggs": ["milk", "egg", "cheese", "yogurt"],
+            "Meat & Seafood": ["chicken", "beef", "fish"],
+            "Bakery": ["bread"],
+            "Snacks & Sweets": ["chip", "cookie", "chocolate"],
+            "Beverages": ["water", "juice", "soda"],
+            "Pantry": ["rice", "pasta", "oil"]
+        },
+        "FRESH_DISQUALIFIERS": ["chip", "powder", "sauce", "paste", "jam", "pickle"]
+    }
+    
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"[Matcher] Error loading categories.json: {e}")
+            
+    return defaults
+
+_config = load_category_config()
+CATEGORIES = _config.get("CATEGORIES", {})
+FRESH_DISQUALIFIERS = _config.get("FRESH_DISQUALIFIERS", [])
+
+def classify_text(text: str) -> Optional[str]:
+    """Classify a product name or query into a category based on keywords."""
+    if not text:
+        return None
+    
+    text = text.lower()
+    
+    # Special check for Fresh Produce disqualifiers
+    is_processed = any(dq in text for dq in FRESH_DISQUALIFIERS)
+    
+    # Sort categories to prioritize specific ones if needed
+    for category, keywords in CATEGORIES.items():
+        if category == "Fresh Produce" and is_processed:
+            continue
+            
+        for kw in keywords:
+            # Match whole words or boundaries to avoid 'pear' in 'pearl'
+            pattern = r'\b' + re.escape(kw) + r'\b'
+            if re.search(pattern, text):
+                return category
+    
+    return None
+
+def calculate_relevance_score(product_name: str, query: str) -> float:
+    """
+    Calculate a relevance score (0.0 to 1.0) for a product given a query.
+    Boosts items that are 'purer' matches for the query.
+    """
+    name = product_name.lower()
+    query = query.lower()
+    query_terms = query.split()
+    
+    if not query_terms:
+        return 0.0
+    
+    score = 0.0
+    
+    # CHECK: Do all query terms exist as whole words?
+    all_terms_as_words = all(re.search(r'\b' + re.escape(term) + r'\b', name) for term in query_terms)
+    
+    # 1. Exact Name Match (very rare in groceries but high boost)
+    if name == query:
+        score += 0.5
+        
+    # 2. Query matches start of name (e.g. "Onion - Red" for query "Onion")
+    if name.startswith(query):
+        score += 0.3
+        
+    # 3. Category Match Boost & Processed Item Penalty
+    q_cat = classify_text(query)
+    p_cat = classify_text(name)
+    
+    # Check if the product contains any disqualifiers for its query category
+    is_processed = any(dq in name for dq in FRESH_DISQUALIFIERS)
+    
+    if q_cat == "Fresh Produce":
+        if is_processed:
+            # Massive penalty for chips/wraps when looking for fresh veg
+            score -= 0.5
+        elif p_cat == "Fresh Produce" and all_terms_as_words:
+            # Only give category boost if ALL query terms are whole words
+            score += 0.2
+            
+            # Better Noise Removal for Exact Identity Check
+            # Remove weights, units, and symbols like -, (, ), bunch, pack
+            noise_pat = r'\b(\d+\s*(kg|g|l|ml|pcs|pack|pk|bunch|grams|kilogram|oz|cm|mm|mtr))\b|[\(\)\-\,\+]'
+            clean_name = re.sub(noise_pat, '', name).strip()
+            # Remove extra spaces
+            clean_name = ' '.join(clean_name.split())
+            
+            if clean_name == query:
+                score += 0.4
+    elif q_cat and p_cat == q_cat and all_terms_as_words:
+        score += 0.2
+    
+    # 4. Word Position & Match Quality Boost
+    for i, term in enumerate(query_terms):
+        # Check for whole-word match first
+        is_whole_word = re.search(r'\b' + re.escape(term) + r'\b', name) is not None
+        
+        if is_whole_word:
+            # Significant bonus for whole-word match
+            pos = name.find(term)
+            if pos < 20:  # Near start
+                score += (0.15 / (i + 1))
+            else:
+                score += 0.05
+        elif term in name:
+            # Small penalty for substring-only match (e.g., "peas" in "chickpeas")
+            # This ensures "peas" >> "chickpeas" when searching "peas"
+            score -= 0.1
+
+    return max(0.0, min(score, 1.0))
+
 def parse_price(price_str: str) -> Optional[float]:
     """
     Extract numeric price value from price string
@@ -43,10 +167,43 @@ def extract_quantity(product_name: str) -> Tuple[Optional[float], Optional[str]]
     if not product_name:
         return None, None
     
+    # PRIORITY: Check for weight/volume in parentheses first (most reliable)
+    # e.g., "Baby Potato - 10-15 Pieces (220-250g)" -> prioritize (220-250g)
+    units_regex = r'(kg|kilograms|kilogram|gm|g|grams|gram|l|litres|liters|litre|liter|ltr|ml|pcs|pieces|piece|pc|packs|pack|pck|m|sqft|sq\.ft|sq\s*ft)\b'
+    
+    paren_pattern = r'\((\d+(?:-\d+)?)\s*' + units_regex + r'\)'
+    paren_match = re.search(paren_pattern, product_name.lower())
+    if paren_match:
+        try:
+            quantity_str = paren_match.group(1)
+            unit = paren_match.group(2).lower()
+            
+            # Handle range: take the midpoint
+            if '-' in quantity_str:
+                parts = quantity_str.split('-')
+                value = (float(parts[0]) + float(parts[1])) / 2
+            else:
+                value = float(quantity_str)
+            
+            # Normalize unit
+            if unit in ['kg', 'kilogram', 'kilograms']:
+                return value, 'kg'
+            elif unit in ['gm', 'g', 'gram', 'grams']:
+                return value, 'g'
+            elif unit in ['l', 'ltr', 'litre', 'liter', 'litres', 'liters']:
+                return value, 'l'
+            elif unit in ['ml']:
+                return value, 'ml'
+            elif unit in ['pcs', 'piece', 'pieces', 'pc']:
+                return value, 'pcs'
+            elif unit in ['sqft', 'sq.ft', 'sq ft']:
+                return value, 'sqft'
+            return value, unit
+        except (ValueError, IndexError):
+            pass
+    
     # Pattern matches: 1kg, 500g, 1.5L, 250ml, 1 kg, 500 g, etc.
     # ORDER MATTERS: precise multipack patterns first
-    
-    units_regex = r'(kg|kilograms|kilogram|g|grams|gram|l|litres|liters|litre|liter|ltr|ml|pcs|pieces|piece|pc|packs|pack|pck|m|sqft|sq\.ft|sq\s*ft)\b'
         
     patterns = [
         # ------------------------------------------------------
@@ -63,9 +220,8 @@ def extract_quantity(product_name: str) -> Tuple[Optional[float], Optional[str]]
         
         # 3. SIZE ... COUNT (Implicit multiplication with keywords)
         # e.g., "1kg Pack of 2", "21g 6 PCS"
-        # Matches: (SIZE) (UNIT) ... (COUNT) (TYPE)
-        # We use non-greedy match .*? to bridge the gap.
-        (r'(\d+\.?\d*)\s*' + units_regex + r'.*?(\d+)\s*(?:packs?|pcs|pieces?|sets?)\b', True),
+        # RESTRICTION: Only if COUNT is not part of a range (no hyphen before it)
+        (r'(\d+\.?\d*)\s*' + units_regex + r'(?!.*\d+-\d+).*?(?<!-)(\ d+)(?!-)\s*(?:packs?|pcs|pieces?|sets?)\b', True),
         
         # 4. SIZE ... PACK OF COUNT
         # e.g., "1kg Pack of 2" (Specific "Pack of" variant if #3 misses)
@@ -73,14 +229,14 @@ def extract_quantity(product_name: str) -> Tuple[Optional[float], Optional[str]]
 
         # 5. COUNT ... SIZE (Implicit multiplication)
         # e.g., "4 Pieces - 8grams", "3 pack 200g"
-        # Matches: (COUNT) (TYPE|sep) ... (SIZE) (UNIT)
-        (r'(\d+)\s*(?:packs?|pcs|pieces?|sets?)\s*(?:of|-)?\s*.*?(\d+\.?\d*)\s*' + units_regex + r'\b', True),
+        # RESTRICTION: Only if COUNT is NOT a range and SIZE is NOT in parentheses
+        (r'(?<!\d-)(\d+)(?!-\d)\s*(?:packs?|pcs|pieces?|sets?)\s*(?:of|-)?(?!\s*\().*?(\d+\.?\d*)\s*' + units_regex + r'\b', True),
         
         # ------------------------------------------------------
         # SINGLE UNIT PATTERNS
         # ------------------------------------------------------
-        # Standard: 1.5kg (with boundary check)
-        (r'(\d+\.?\d*)\s*' + units_regex + r'\b', False),
+        # Standard: 1.5kg or 0.9-1kg with range support (with boundary check)
+        (r'(\d+\.?\d*(?:-\d+\.?\d*)?)\s*' + units_regex + r'\b', False),
     ]
     
     for pattern, is_multipack in patterns:
@@ -120,13 +276,20 @@ def extract_quantity(product_name: str) -> Tuple[Optional[float], Optional[str]]
                          else:
                              value = count * size
                 else:
-                    value = float(groups[0])
+                    quantity_str = groups[0]
                     unit = groups[-1].lower()
+                    
+                    # Handle range in single unit (e.g., "0.9-1 kg" or "220-250g")
+                    if '-' in str(quantity_str):
+                        parts = str(quantity_str).split('-')
+                        value = (float(parts[0]) + float(parts[1])) / 2
+                    else:
+                        value = float(quantity_str)
                                 
                 # Normalize unit strings
                 if unit in ['kg', 'kilogram', 'kilograms']:
                     return value, 'kg'
-                elif unit in ['g', 'gram', 'grams']:
+                elif unit in ['gm', 'g', 'gram', 'grams']:
                     return value, 'g'
                 elif unit in ['l', 'ltr', 'litre', 'liter', 'litres', 'liters']:
                     return value, 'l'
@@ -450,29 +613,50 @@ def match_products(store_results: Dict[str, Dict], openrouter_api_key: str, quer
         print("[Matcher] Step 2: Grouping matches...")
         matched_products = group_parsed_products(all_parsed)
         
-        # Step 3: Identify Match Type and Sort by Unit Price
+        # Step 3: Sort by Relevance Score (Category-Aware Ranking)
         if matched_products:
             query_terms = query.lower().split() if query else []
             
             for item in matched_products:
-                # Determine match type
+                # Determine match type and relevance
                 match_type = 'partial'
-                if query_terms:
+                relevance = 0.0
+                
+                if query:
                     name = item.get('matched_name', '').lower()
                     present_count = sum(1 for term in query_terms if term in name)
-                    if present_count == len(query_terms):
-                        match_type = 'exact'
+                    
+                    # Calculate structured relevance score
+                    relevance = calculate_relevance_score(name, query)
+                    
+                    # SMART EXACT MATCH CRITERIA:
+                    # Mark as 'exact' if all query terms are present AND:
+                    # - Relevance score is POSITIVE (not a penalized processed item) AND
+                    # - Either has decent score (>0.25) OR is Fresh Produce with any positive score
+                    if present_count == len(query_terms) and relevance > 0:
+                        q_cat = classify_text(query)
+                        if relevance > 0.25 or q_cat == "Fresh Produce":
+                            match_type = 'exact'
                 
                 item['match_type'] = match_type
+                item['relevance_score'] = relevance
             
             def get_sort_key(item):
-                # Primary Sort: Normalized Unit Price (Ascending)
+                # PRIMARY SORT: Relevance Score (Descending)
+                # This is now the MAIN ranking criterion
+                rel_score = -item.get('relevance_score', 0)
+                
+                # SECONDARY SORT: Match Type (exact first, but only matters if relevance tied)
+                match_val = 0 if item.get('match_type') == 'exact' else 1
+                
+                # TERTIARY SORT: Normalized Unit Price (Ascending)
                 unit_price = item.get('normalized_unit_price')
                 if unit_price is None:
                     unit_price = float('inf')
-                return unit_price
+                
+                return (rel_score, match_val, unit_price)
             
-            # Sort all items purely by price per unit first
+            # Sort all items by relevance first
             matched_products.sort(key=get_sort_key)
         
         print(f"[Matcher] Successfully matched {len(matched_products)} product groups")

@@ -18,7 +18,8 @@ from dotenv import load_dotenv
 from utils import match_products, sort_products, parse_price
 from database import (
     save_search_results, get_price_history, get_all_tracked_products, 
-    get_price_comparison, get_product_by_name, get_db_stats
+    get_price_comparison, get_product_by_name, get_db_stats,
+    get_price_trends
 )
 
 # Load environment variables
@@ -739,16 +740,22 @@ def match():
     sorted_products = sort_products(matched_products, sort_by=sort_by, ascending=ascending)
     
     # Save to database in background (CDC Type 2 price tracking)
+    # We save first, then enrich if possible, though background saving means
+    # trends might only show on second search for new products.
     try:
         if sorted_products:
-            # Background task to avoid blocking response
-            threading.Thread(
-                target=save_search_results, 
-                args=(sorted_products,), 
-                daemon=True
-            ).start()
+            save_search_results(sorted_products) # Save synchronously for trend availability
+            
+            # Enrich with trends and IDs for Frontend
+            from utils import classify_text
+            for p in sorted_products:
+                p_db = get_product_by_name(p.get('matched_name'))
+                if p_db:
+                    p['trends'] = get_price_trends(p_db['id'])
+                    p['product_id'] = p_db['id']
+                    p['category'] = classify_text(p.get('matched_name'))
     except Exception as e:
-        print(f"[Database] Error saving to database: {str(e)}")
+        print(f"[Database] Error saving/enriching products: {str(e)}")
     
     return jsonify({
         'matched_products': sorted_products
@@ -806,13 +813,25 @@ def preload_browsers():
     print("[Startup] Browser preloading complete")
 
 if __name__ == '__main__':
-    # Start browser preloading in background thread
-    # Only run once (not in reloader subprocess)
-    if os.environ.get('WERKZEUG_RUN_MAIN') != 'true':
-        # First run - mark as not started
-        pass
-    else:
-        # Reloader subprocess - start preloading
+    # Start background scheduler for price refreshes
+    def run_scheduled_scraping():
+        """Background thread to refresh prices for tracked products."""
+        # Wait for system to settle
+        time.sleep(60)
+        while True:
+            # Refresh every 12 hours
+            time.sleep(12 * 3600)
+            try:
+                print("[Scheduler] Starting scheduled refresh...")
+                # Logic would go here to trigger background searches
+                # For now, we just log it as a placeholder for the flow
+            except Exception as e:
+                print(f"[Scheduler] Error: {e}")
+
+    if os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
+        # Start preloading
         threading.Thread(target=preload_browsers, daemon=True).start()
+        # Start scraper
+        threading.Thread(target=run_scheduled_scraping, daemon=True).start()
     
     app.run(debug=True, host='0.0.0.0', port=9000)

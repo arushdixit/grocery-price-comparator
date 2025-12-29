@@ -220,9 +220,17 @@ function renderMatchedProducts(matchedProducts, locations) {
                         section += '<div class="absolute -top-2 -right-2 bg-green-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm z-10">BEST DEAL</div>';
                     }
 
-                    section += '<div class="flex items-center justify-start mb-1 h-6">';
+                    section += '<div class="flex items-center justify-between mb-1 h-6">';
                     // Logo Only
                     section += `<img src="${escapeHtml(config.logo)}" alt="${config.name}" class="h-5 w-auto object-contain" />`;
+
+                    // Trend Indicator
+                    const trend = (p.trends || {})[store];
+                    if (trend === 'up') {
+                        section += `<span class="text-[10px] text-red-500 font-bold flex items-center gap-0.5" title="Price increased">📈</span>`;
+                    } else if (trend === 'down') {
+                        section += `<span class="text-[10px] text-green-500 font-bold flex items-center gap-0.5" title="Price halved/dropped!">📉</span>`;
+                    }
                     section += '</div>';
 
                     // Price
@@ -267,10 +275,13 @@ function renderMatchedProducts(matchedProducts, locations) {
                 // Price History Button
                 const safeName = (p.matched_name || '').replace(/'/g, "\\'");
                 const escapedName = escapeHtml(safeName);
-                section += `<button onclick="showPriceHistory('${escapedName}')" class="mt-3 w-full text-xs px-2 py-1.5 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-primary transition-colors flex items-center justify-center gap-1">
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
-                    </svg>
+                // Add to Basket Button
+                section += `<button onclick="addToSmartBasket(${p.product_id}, '${escapedName}')" class="mt-2 w-full text-xs px-2 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-all font-semibold shadow-sm active:scale-95 flex items-center justify-center gap-1">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                    Add to Basket
+                </button>`;
+
+                section += `<button onclick="showPriceHistory('${escapedName}')" class="mt-2 w-full text-[10px] px-2 py-1 text-gray-500 hover:text-primary transition-colors flex items-center justify-center gap-1">
                     Price History
                 </button>`;
 
@@ -867,16 +878,30 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// Close modal on escape key
-document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') {
-        closePriceHistoryModal();
-    }
-});
+// ---------- SMART BASKET LOGIC ----------
+let smartBasket = JSON.parse(localStorage.getItem('smartBasket') || '[]');
 
-// Close modal on backdrop click
-document.getElementById('priceHistoryModal')?.addEventListener('click', function (e) {
-    if (e.target === this) {
-        closePriceHistoryModal();
+function updateBasketUI() {
+    const count = smartBasket.length;
+    const badge = document.getElementById('basketCount');
+    if (badge) {
+        badge.textContent = count;
+        badge.classList.toggle('hidden', count === 0);
     }
-});
+    localStorage.setItem('smartBasket', JSON.stringify(smartBasket));
+}
+
+function addToSmartBasket(productId, productName) {
+    const exists = smartBasket.find(item => item.productName === productName);
+    if (!exists) {
+        smartBasket.push({ productId, productName });
+        updateBasketUI();
+    }
+}
+
+function toggleBasket() {
+    alert("Smart Basket summary coming soon! Currently you have " + smartBasket.length + " items in your list.");
+}
+
+// Initialize UI on load
+document.addEventListener('DOMContentLoaded', updateBasketUI);

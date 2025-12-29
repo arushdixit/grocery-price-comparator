@@ -94,19 +94,31 @@ def extract_quantity(product_name: str) -> Tuple[Optional[float], Optional[str]]
             groups = match.groups()
             try:
                 if is_multipack and len(groups) >= 3:
-                     # Check if it is SIZE x COUNT or COUNT x SIZE based on where the unit is logic
+                     # DEDUPLICATION CHECK: If size and count are the same, treat as single unit
+                     # e.g., "30 Pieces - 30 Pieces" should be 30, not 900
+                     size_or_count_1 = float(groups[0])
                      if groups[1] in ['kg', 'g', 'l', 'ml', 'm', 'ltr', 'litre', 'liter', 'gram', 'grams', 'kilogram', 'kilograms']:
-                         # SIZE x COUNT
-                         size = float(groups[0])
+                         # SIZE x COUNT format
+                         size = size_or_count_1
                          unit = groups[1].lower()
                          count = float(groups[2])
-                         value = size * count
+                         
+                         # If size == count, it's likely a duplicate (e.g., "30 pieces - 30 pieces")
+                         if size == count:
+                             value = size  # Don't multiply duplicates
+                         else:
+                             value = size * count
                      else:
-                         # COUNT x SIZE
-                         count = float(groups[0])
+                         # COUNT x SIZE format
+                         count = size_or_count_1
                          size = float(groups[1])
                          unit = groups[2].lower()
-                         value = count * size
+                         
+                         # If count == size, it's likely a duplicate
+                         if count == size:
+                             value = size  # Don't multiply duplicates
+                         else:
+                             value = count * size
                 else:
                     value = float(groups[0])
                     unit = groups[-1].lower()

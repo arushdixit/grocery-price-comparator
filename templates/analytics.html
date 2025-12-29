@@ -28,24 +28,112 @@
 </head>
 
 <body class="bg-gray-100 min-h-screen">
-    <!-- Navigation Bar -->
-    <header class="sticky top-0 z-50 bg-white border-b border-gray-200 shadow-sm">
-        <div class="container mx-auto px-4 py-4">
-            <div class="flex items-center justify-between">
+    <!-- Side Drawer (Hamburger Menu) -->
+    <div id="sideDrawer" class="fixed inset-0 z-[60] invisible transition-all duration-300">
+        <!-- Backdrop -->
+        <div id="drawerBackdrop" class="absolute inset-0 bg-black/0 transition-all duration-300"
+            onclick="toggleDrawer()"></div>
+        <!-- Drawer Content -->
+        <div id="drawerContent"
+            class="absolute inset-y-0 left-0 w-72 bg-white shadow-2xl flex flex-col -translate-x-full transition-transform duration-300 ease-in-out">
+            <div class="p-6 border-b border-border flex items-center justify-between">
                 <div class="flex items-center gap-3">
-                    <a href="/" class="flex items-center gap-3 hover:opacity-80 transition-opacity">
-                        <img src="{{ url_for('static', filename='logos/app_logo.png') }}" alt="PriceHunt Logo"
-                            class="h-10 w-10 object-contain">
-                        <div>
-                            <h1 class="text-xl font-bold text-foreground">PriceHunt UAE</h1>
-                            <p class="text-xs text-muted-foreground">Price Analytics Dashboard</p>
-                        </div>
-                    </a>
+                    <img src="{{ url_for('static', filename='logos/app_logo.png') }}"
+                        alt="Grocery Price Comparator Logo" class="h-8 w-8 object-contain">
+                    <span class="font-bold text-foreground">Menu</span>
                 </div>
-                <a href="/"
-                    class="px-4 py-2 text-sm bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors">
-                    ← Back to Search
+                <button onclick="toggleDrawer()" class="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        class="lucide lucide-x w-6 h-6 text-muted-foreground">
+                        <path d="M18 6 6 18"></path>
+                        <path d="m6 6 12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <nav class="flex-1 p-4 space-y-2">
+                <a href="/" id="nav-home"
+                    class="flex items-center gap-3 px-4 py-3 rounded-xl transition-colors font-medium text-foreground hover:bg-gray-50">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        class="w-5 h-5">
+                        <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                        <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                    </svg>
+                    Home
                 </a>
+                <a href="/analytics" id="nav-analytics"
+                    class="flex items-center gap-3 px-4 py-3 rounded-xl transition-colors font-medium text-foreground hover:bg-gray-50">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        class="w-5 h-5">
+                        <line x1="12" y1="20" x2="12" y2="10"></line>
+                        <line x1="18" y1="20" x2="18" y2="4"></line>
+                        <line x1="6" y1="20" x2="6" y2="16"></line>
+                    </svg>
+                    Price Analytics
+                </a>
+            </nav>
+            <div class="p-4 border-t border-border">
+                <p class="text-xs text-muted-foreground text-center">Grocery Price Comparator &copy; 2024</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Navigation Bar -->
+    <header class="sticky top-0 z-50 w-full bg-white border-b border-border shadow-sm px-4 lg:px-6">
+        <div class="py-3 flex items-center justify-between gap-4 lg:gap-8">
+            <!-- Left Section: Hamburger & Logo -->
+            <div class="flex items-center gap-4 shrink-0">
+                <button onclick="toggleDrawer()" class="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        class="lucide lucide-menu w-6 h-6 text-foreground">
+                        <line x1="4" x2="20" y1="12" y2="12"></line>
+                        <line x1="4" x2="20" y1="6" y2="6"></line>
+                        <line x1="4" x2="20" y1="18" y2="18"></line>
+                    </svg>
+                </button>
+                <a href="/" class="flex items-center gap-2 hover:opacity-80 transition-opacity">
+                    <img src="{{ url_for('static', filename='logos/app_logo.png') }}"
+                        alt="Grocery Price Comparator Logo" class="h-[60px] w-[60px] object-contain">
+                    <h1 class="text-lg font-bold text-foreground leading-tight hidden sm:block">Grocery Price Comparator
+                    </h1>
+                </a>
+            </div>
+
+            <!-- Center Section: Search Box -->
+            <div class="flex-1 max-w-2xl flex gap-2">
+                <div class="relative flex-1">
+                    <input type="text" id="searchInput" placeholder="Search groceries..."
+                        onkeypress="if(event.key==='Enter') searchGrocery()"
+                        class="w-full px-4 py-2 text-sm border border-border rounded-lg outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10">
+                </div>
+                <button id="searchBtn" onclick="searchGrocery()"
+                    class="px-4 py-2 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-primary/90 active:scale-95 transition-all disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center min-w-[44px]">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
+                        class="lucide lucide-search">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <path d="m21 21-4.3-4.3"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Right Section: Smart Basket -->
+            <div class="shrink-0 flex items-center">
+                <button
+                    class="relative flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary hover:bg-secondary/80 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        class="lucide lucide-shopping-cart w-4 h-4 text-foreground">
+                        <circle cx="8" cy="21" r="1"></circle>
+                        <circle cx="19" cy="21" r="1"></circle>
+                        <path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12">
+                        </path>
+                    </svg>
+                    <span class="text-sm font-medium text-foreground hidden md:inline">Smart Basket</span>
+                </button>
             </div>
         </div>
     </header>
@@ -151,8 +239,16 @@
         // Load products on page load
         document.addEventListener('DOMContentLoaded', loadProducts);
 
-        // Search filter
+        // Search Filter (Internal to Analytics)
         document.getElementById('searchProducts').addEventListener('input', filterProducts);
+
+        // Global Search (Redirects to Home)
+        function searchGrocery() {
+            const query = document.getElementById('searchInput').value.trim();
+            if (query) {
+                window.location.href = '/?q=' + encodeURIComponent(query);
+            }
+        }
 
         async function loadProducts() {
             try {
@@ -327,6 +423,43 @@
                 }
             });
         }
+
+        function toggleDrawer() {
+            const drawer = document.getElementById('sideDrawer');
+            const backdrop = document.getElementById('drawerBackdrop');
+            const content = document.getElementById('drawerContent');
+
+            if (drawer.classList.contains('invisible')) {
+                // Open
+                drawer.classList.remove('invisible');
+                backdrop.classList.replace('bg-black/0', 'bg-black/50');
+                content.classList.remove('-translate-x-full');
+                document.body.style.overflow = 'hidden';
+            } else {
+                // Close
+                backdrop.classList.replace('bg-black/50', 'bg-black/0');
+                content.classList.add('-translate-x-full');
+                document.body.style.overflow = '';
+                setTimeout(() => {
+                    drawer.classList.add('invisible');
+                }, 300);
+            }
+        }
+
+        // Highlight active nav link
+        document.addEventListener('DOMContentLoaded', () => {
+            const path = window.location.pathname;
+            const homeLink = document.getElementById('nav-home');
+            const analyticsLink = document.getElementById('nav-analytics');
+
+            if (path === '/' || path === '') {
+                homeLink.classList.add('bg-primary/10', 'text-primary', 'font-semibold');
+                homeLink.querySelector('svg').classList.add('text-primary');
+            } else if (path.includes('analytics')) {
+                analyticsLink.classList.add('bg-primary/10', 'text-primary', 'font-semibold');
+                analyticsLink.querySelector('svg').classList.add('text-primary');
+            }
+        });
 
         function closeModal() {
             document.getElementById('priceHistoryModal').classList.add('hidden');

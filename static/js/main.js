@@ -854,6 +854,19 @@ function renderPriceHistoryChart(history) {
     });
 }
 
+// URL Parameter Search Handling
+document.addEventListener('DOMContentLoaded', () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const query = urlParams.get('q');
+    if (query) {
+        const input = document.getElementById('searchInput');
+        if (input) {
+            input.value = query;
+            searchGrocery();
+        }
+    }
+});
+
 // Close modal on escape key
 document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {

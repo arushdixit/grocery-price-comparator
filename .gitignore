@@ -46,3 +46,6 @@ Thumbs.db
 
 #docs
 /docs
+
+#database
+grocery_prices.db

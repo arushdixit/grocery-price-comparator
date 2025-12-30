@@ -120,7 +120,7 @@ function renderMatchedProducts(matchedProducts, locations) {
         displayProducts.forEach(p => {
             const stores = p.stores || {};
             const prices = [];
-            ['carrefour', 'noon', 'amazon', 'talabat'].forEach(s => {
+            ['carrefour', 'noon', 'amazon', 'talabat', 'lulu'].forEach(s => {
                 const info = stores[s];
                 if (info && typeof info.price === 'number') {
                     prices.push({ store: s, price: info.price });
@@ -197,16 +197,17 @@ function renderMatchedProducts(matchedProducts, locations) {
             section += '</div>';
 
             // Bottom: Store Cards Grid
-            section += '<div class="grid grid-cols-1 md:grid-cols-4 gap-4">';
+            section += '<div class="grid grid-cols-2 md:grid-cols-5 gap-3">';
 
             const storeConfigs = {
                 carrefour: { name: 'Carrefour', logo: '/static/logos/carrefour.png', color: 'blue', initial: 'C' },
                 noon: { name: 'Noon', logo: '/static/logos/noon.png', color: 'gray', initial: 'N' },
                 amazon: { name: 'Amazon', logo: '/static/logos/amazon.png', color: 'orange', initial: 'A' },
-                talabat: { name: 'Talabat', logo: '/static/logos/talabat.png', color: 'orange', initial: 'T' }
+                talabat: { name: 'Talabat', logo: '/static/logos/talabat.png', color: 'orange', initial: 'T' },
+                lulu: { name: 'Lulu', logo: '/static/logos/lulu.png', color: 'green', initial: 'L' }
             };
 
-            ['amazon', 'carrefour', 'noon', 'talabat'].forEach(store => {
+            ['amazon', 'carrefour', 'noon', 'talabat', 'lulu'].forEach(store => {
                 const info = stores[store];
                 const config = storeConfigs[store];
                 const isBest = bestStores.includes(store);
@@ -276,7 +277,7 @@ function renderMatchedProducts(matchedProducts, locations) {
                 const safeName = (p.matched_name || '').replace(/'/g, "\\'");
                 const escapedName = escapeHtml(safeName);
                 // Add to Basket Button
-                section += `<button onclick="addToSmartBasket(${p.product_id}, '${escapedName}')" class="mt-2 w-full text-xs px-2 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-all font-semibold shadow-sm active:scale-95 flex items-center justify-center gap-1">
+                section += `<button onclick="addToSmartBasket(${JSON.stringify(p).replace(/"/g, '&quot;')})" class="mt-2 w-full text-xs px-2 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-all font-semibold shadow-sm active:scale-95 flex items-center justify-center gap-1">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
                     Add to Basket
                 </button>`;
@@ -335,6 +336,7 @@ async function checkPreloadStatus() {
             if (store === 'carrefour') searchProgressState.carrefour.duration = 15000;
             if (store === 'amazon') searchProgressState.amazon.duration = 12000;
             if (store === 'talabat') searchProgressState.talabat.duration = 2000; // Keep fast
+            if (store === 'lulu') searchProgressState.lulu.duration = 2000; // API-based, fast
 
             if (state === 'loading' || state === 'not_started') {
                 // Start progress
@@ -372,7 +374,8 @@ const searchProgressState = {
     carrefour: { active: false, interval: null, startTime: null, duration: 15000 },
     noon: { active: false, interval: null, startTime: null, duration: 7000 },
     amazon: { active: false, interval: null, startTime: null, duration: 12000 },
-    talabat: { active: false, interval: null, startTime: null, duration: 2000 }
+    talabat: { active: false, interval: null, startTime: null, duration: 2000 },
+    lulu: { active: false, interval: null, startTime: null, duration: 2000 }
 };
 
 function startSearchProgress(store) {
@@ -623,7 +626,8 @@ function renderRawResults(rawData) {
         { name: 'Carrefour', key: 'carrefour', className: 'carrefour' },
         { name: 'Noon', key: 'noon', className: 'noon' },
         { name: 'Amazon', key: 'amazon', className: 'amazon' },
-        { name: 'Talabat', key: 'talabat', className: 'talabat' }
+        { name: 'Talabat', key: 'talabat', className: 'talabat' },
+        { name: 'Lulu', key: 'lulu', className: 'lulu' }
     ];
 
     stores.forEach(store => {
@@ -799,7 +803,8 @@ function renderPriceHistoryChart(history) {
         carrefour: { bg: 'rgba(59, 130, 246, 0.1)', border: 'rgb(59, 130, 246)' },
         noon: { bg: 'rgba(17, 24, 39, 0.1)', border: 'rgb(17, 24, 39)' },
         amazon: { bg: 'rgba(255, 153, 0, 0.1)', border: 'rgb(255, 153, 0)' },
-        talabat: { bg: 'rgba(255, 90, 0, 0.1)', border: 'rgb(255, 90, 0)' }
+        talabat: { bg: 'rgba(255, 90, 0, 0.1)', border: 'rgb(255, 90, 0)' },
+        lulu: { bg: 'rgba(0, 166, 81, 0.1)', border: 'rgb(0, 166, 81)' }
     };
 
     // Build datasets
@@ -891,16 +896,304 @@ function updateBasketUI() {
     localStorage.setItem('smartBasket', JSON.stringify(smartBasket));
 }
 
-function addToSmartBasket(productId, productName) {
-    const exists = smartBasket.find(item => item.productName === productName);
+function addToSmartBasket(product) {
+    const exists = smartBasket.find(item => item.matched_name === product.matched_name);
     if (!exists) {
-        smartBasket.push({ productId, productName });
+        smartBasket.push(product);
         updateBasketUI();
     }
 }
 
+// ---------- SMART BASKET UI & OPTIMIZATION ----------
+
+const DELIVERY_RULES = {
+    noon: { threshold: 30, belowFee: 7, smallCartThreshold: 20, smallCartFee: 3 },
+    talabat: { threshold: 0, belowFee: 7.49 },
+    amazon: { threshold: 0, belowFee: 0 },
+    carrefour: { threshold: 0, belowFee: 0 }, // Physical visit assumption
+    lulu: { threshold: 80, belowFee: 7 }
+};
+
 function toggleBasket() {
-    alert("Smart Basket summary coming soon! Currently you have " + smartBasket.length + " items in your list.");
+    const modal = document.getElementById('basketModal');
+    if (modal.classList.contains('hidden')) {
+        modal.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+        renderBasketContent();
+    } else {
+        modal.classList.add('hidden');
+        document.body.style.overflow = '';
+    }
+}
+
+function clearBasket() {
+    if (confirm("Are you sure you want to clear your shopping basket?")) {
+        smartBasket = [];
+        updateBasketUI();
+        renderBasketContent();
+    }
+}
+
+function renderBasketContent() {
+    const listContainer = document.getElementById('basketItemsList');
+    const emptyState = document.getElementById('basketEmptyState');
+    const footer = document.getElementById('basketFooter');
+    const countLabel = document.getElementById('basketModalCount');
+
+    countLabel.textContent = smartBasket.length;
+
+    if (smartBasket.length === 0) {
+        listContainer.innerHTML = '';
+        emptyState.classList.remove('hidden');
+        document.getElementById('strategiesContainer').innerHTML = '';
+        footer.classList.add('hidden');
+        return;
+    }
+
+    emptyState.classList.add('hidden');
+    footer.classList.remove('hidden');
+
+    // Render Items
+    listContainer.innerHTML = smartBasket.map((item, index) => {
+        const stores = Object.keys(item.stores).map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(', ');
+        return `
+            <div class="flex items-center gap-4 p-3 border border-gray-100 rounded-xl hover:bg-gray-50 transition-colors">
+                <img src="${escapeHtml(item.primary_image || '')}" class="w-12 h-12 object-contain mix-blend-multiply bg-white rounded-lg p-1 border border-gray-100" onerror="this.src='/static/logos/app_logo.png'">
+                <div class="flex-1 min-w-0">
+                    <h4 class="font-bold text-gray-900 truncate">${escapeHtml(item.matched_name)}</h4>
+                    <p class="text-xs text-gray-500">Available at: ${escapeHtml(stores)}</p>
+                </div>
+                <button onclick="removeFromBasket(${index})" class="p-2 text-gray-300 hover:text-destructive transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                </button>
+            </div>
+        `;
+    }).join('');
+
+    calculateAndRenderStrategies();
+}
+
+function removeFromBasket(index) {
+    smartBasket.splice(index, 1);
+    updateBasketUI();
+    renderBasketContent();
+}
+
+function calculateAndRenderStrategies() {
+    const strategiesContainer = document.getElementById('strategiesContainer');
+    const bestTotalElem = document.getElementById('bestTotal');
+    const savedAmountElem = document.getElementById('savedAmount');
+    const savingBadge = document.getElementById('savingBadge');
+
+    // 1. Calculate Single Store Strategy (Convenience)
+    const singleStoreResults = ['carrefour', 'noon', 'amazon', 'talabat', 'lulu'].map(store => {
+        let itemsFound = 0;
+        let subtotal = 0;
+        const missingItems = [];
+
+        smartBasket.forEach(item => {
+            const storeData = item.stores[store];
+            if (storeData && typeof storeData.price === 'number') {
+                itemsFound++;
+                subtotal += storeData.price;
+            } else {
+                missingItems.push(item.matched_name);
+            }
+        });
+
+        const delivery = calculateDeliveryFee(store, subtotal);
+        return {
+            store,
+            itemsFound,
+            subtotal,
+            delivery,
+            total: subtotal + delivery,
+            missingItems,
+            allInOne: itemsFound === smartBasket.length
+        };
+    });
+
+    // 2. Calculate Optimal Split (Savings)
+    // Global search for small baskets as proposed
+    const bestSplit = findGlobalOptimalSplit(smartBasket);
+
+    // Sort single store results by total (ascending)
+    const sortedSingle = singleStoreResults
+        .filter(r => r.itemsFound > 0)
+        .sort((a, b) => a.total - b.total);
+
+    const bestSingle = sortedSingle[0];
+
+    // Render UI
+    let html = '';
+
+    // Strategy 1 Card: Convenience
+    if (bestSingle) {
+        html += `
+            <div class="bg-white border-2 border-primary/20 rounded-2xl p-5 shadow-sm">
+                <div class="flex items-center justify-between mb-4">
+                    <span class="px-2 py-1 bg-primary/10 text-primary text-[10px] font-bold rounded uppercase tracking-wider">Fastest & Simplest</span>
+                    <span class="text-lg font-bold text-gray-900">AED ${bestSingle.total.toFixed(2)}</span>
+                </div>
+                <div class="flex items-center gap-3 mb-4">
+                    <img src="/static/logos/${bestSingle.store}.png" class="h-6 w-auto object-contain">
+                    <span class="font-bold text-gray-900">${bestSingle.store.charAt(0).toUpperCase() + bestSingle.store.slice(1)} Only</span>
+                </div>
+                ${bestSingle.missingItems.length > 0 ? `
+                    <p class="text-[11px] text-amber-600 font-medium mb-3">⚠️ Missing ${bestSingle.missingItems.length} items (e.g. ${escapeHtml(bestSingle.missingItems[0])})</p>
+                ` : '<p class="text-[11px] text-green-600 font-medium mb-3">✅ All items available!</p>'}
+                <div class="flex justify-between text-xs text-gray-500 pt-3 border-t border-gray-50">
+                    <span>Items: AED ${bestSingle.subtotal.toFixed(2)}</span>
+                    <span>Fee: ${bestSingle.delivery > 0 ? `AED ${bestSingle.delivery.toFixed(2)}` : 'FREE'}</span>
+                </div>
+            </div>
+        `;
+    }
+
+    // Strategy 2 Card: Absolute Savings
+    if (bestSplit) {
+        const savings = bestSingle ? (bestSingle.total - bestSplit.total) : 0;
+        html += `
+            <div class="bg-gray-900 rounded-2xl p-5 shadow-xl text-white">
+                <div class="flex items-center justify-between mb-4">
+                    <span class="px-2 py-1 bg-green-500 text-white text-[10px] font-bold rounded uppercase tracking-wider">Lowest Price</span>
+                    <span class="text-lg font-bold text-white">AED ${bestSplit.total.toFixed(2)}</span>
+                </div>
+                <div class="space-y-3 mb-4">
+                    ${Object.entries(bestSplit.storeBreakdown).map(([store, data]) => `
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <img src="/static/logos/${store}.png" class="h-4 w-auto object-contain grayscale-0 brightness-110">
+                                <span class="text-xs font-medium">${data.count} items</span>
+                            </div>
+                            <span class="text-xs text-gray-400">AED ${data.subtotal.toFixed(2)} + ${data.delivery > 0 ? `AED ${data.delivery.toFixed(2)}` : 'Free'} fee</span>
+                        </div>
+                    `).join('')}
+                </div>
+                <div class="pt-3 border-t border-white/10 flex items-center justify-between">
+                    <span class="text-[10px] text-gray-400">Total Savings</span>
+                    <span class="text-xs font-bold text-green-400">${savings > 0 ? `AED ${savings.toFixed(2)} cheaper than single store` : 'Best possible price'}</span>
+                </div>
+            </div>
+        `;
+    }
+
+    strategiesContainer.innerHTML = html;
+
+    // Update Footer
+    const finalBest = bestSplit ? bestSplit.total : (bestSingle ? bestSingle.total : 0);
+    bestTotalElem.textContent = finalBest.toFixed(2);
+
+    if (bestSingle && bestSplit && bestSingle.total > bestSplit.total) {
+        savingBadge.classList.remove('hidden');
+        savedAmountElem.textContent = (bestSingle.total - bestSplit.total).toFixed(2);
+    } else {
+        savingBadge.classList.add('hidden');
+    }
+}
+
+function calculateDeliveryFee(store, subtotal) {
+    const rules = DELIVERY_RULES[store];
+    if (!rules || subtotal === 0) return 0;
+
+    if (store === 'amazon' || store === 'carrefour') return 0;
+
+    if (store === 'talabat') return rules.belowFee;
+
+    if (store === 'noon') {
+        if (subtotal >= rules.threshold) return 0;
+        let fee = rules.belowFee;
+        if (subtotal < rules.smallCartThreshold) fee += rules.smallCartFee;
+        return fee;
+    }
+
+    return 0;
+}
+
+function findGlobalOptimalSplit(basket) {
+    if (basket.length === 0) return null;
+
+    // Optimization: limit brute force to prevent freezing
+    const MAX_EXHAUSTIVE_ITEMS = 10;
+
+    if (basket.length > MAX_EXHAUSTIVE_ITEMS) {
+        // Fallback to greedy for very large baskets
+        return calculateGreedySplit(basket);
+    }
+
+    // Exhaustive Search (4^N combinations)
+    // Actually, each item is only available in a subset of stores
+    const items = basket.map(p => ({
+        name: p.matched_name,
+        options: Object.entries(p.stores)
+            .filter(([_, data]) => typeof data.price === 'number')
+            .map(([store, data]) => ({ store, price: data.price }))
+    }));
+
+    let bestResult = { total: Infinity };
+
+    function backtrack(itemIdx, currentAssignments) {
+        if (itemIdx === items.length) {
+            // Evaluate this assignment
+            const breakdown = {};
+            currentAssignments.forEach(assn => {
+                if (!breakdown[assn.store]) breakdown[assn.store] = { subtotal: 0, count: 0 };
+                breakdown[assn.store].subtotal += assn.price;
+                breakdown[assn.store].count++;
+            });
+
+            let total = 0;
+            Object.keys(breakdown).forEach(store => {
+                const fee = calculateDeliveryFee(store, breakdown[store].subtotal);
+                breakdown[store].delivery = fee;
+                total += breakdown[store].subtotal + fee;
+            });
+
+            if (total < bestResult.total) {
+                bestResult = { total, storeBreakdown: breakdown };
+            }
+            return;
+        }
+
+        items[itemIdx].options.forEach(opt => {
+            currentAssignments.push(opt);
+            backtrack(itemIdx + 1, currentAssignments);
+            currentAssignments.pop();
+        });
+    }
+
+    backtrack(0, []);
+    return bestResult.total === Infinity ? null : bestResult;
+}
+
+function calculateGreedySplit(basket) {
+    // Pick cheapest store initially for each product
+    const storeBreakdown = {};
+    basket.forEach(item => {
+        const cheapest = Object.entries(item.stores)
+            .filter(([_, data]) => typeof data.price === 'number')
+            .sort((a, b) => a[1].price - b[1].price)[0];
+
+        if (cheapest) {
+            const store = cheapest[0];
+            if (!storeBreakdown[store]) storeBreakdown[store] = { subtotal: 0, count: 0, items: [] };
+            storeBreakdown[store].subtotal += cheapest[1].price;
+            storeBreakdown[store].count++;
+            storeBreakdown[store].items.push(item);
+        }
+    });
+
+    // Refinement: Try moving single items from stores with high delivery fees
+    // to stores where delivery is already covered
+    // (Simplified greedy for now)
+    let total = 0;
+    Object.keys(storeBreakdown).forEach(store => {
+        const fee = calculateDeliveryFee(store, storeBreakdown[store].subtotal);
+        storeBreakdown[store].delivery = fee;
+        total += storeBreakdown[store].subtotal + fee;
+    });
+
+    return { total, storeBreakdown };
 }
 
 // Initialize UI on load

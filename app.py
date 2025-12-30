@@ -44,7 +44,8 @@ _preload_status = {
     'carrefour': 'not_started',  # not_started, loading, ready, error
     'noon': 'not_started',
     'amazon': 'not_started',
-    'talabat': 'ready'  # Talabat doesn't use Selenium
+    'talabat': 'ready',  # Talabat doesn't use Selenium
+    'lulu': 'ready'  # Lulu uses Talabat API
 }
 
 # Active search status
@@ -52,7 +53,8 @@ _search_status = {
     'carrefour': 'ready',  # ready, searching, complete
     'noon': 'ready',
     'amazon': 'ready',
-    'talabat': 'ready'
+    'talabat': 'ready',
+    'lulu': 'ready'
 }
 
 # Detected locations cache
@@ -611,6 +613,83 @@ def search_talabat(item):
         _search_status['talabat'] = 'complete'
         return {'products': [{'name': f'Error: {str(e)}', 'price': 'N/A'}]}
 
+def search_lulu(item):
+    """Search Lulu Hypermarket for item prices via Talabat API"""
+    global _search_status
+    _search_status['lulu'] = 'searching'
+    start_time = time.time()
+    print(f"[Lulu] Starting search for '{item}'...")
+    try:
+        # Lulu Hypermarket API endpoint (via Talabat)
+        # Store ID: 31fbcd29-f112-47c4-814a-d13ed0ac8233
+        url = f"https://www.talabat.com/nextApi/groceries/stores/31fbcd29-f112-47c4-814a-d13ed0ac8233/products"
+        params = {
+            'countryId': '4',  # UAE
+            'query': item,
+            'limit': '20',
+            'offset': '0',
+            'isDarkstore': 'false',
+            'isMigrated': 'true',
+            'lang': 'en'  # Force English results
+        }
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'application/json',
+            'Accept-Language': 'en-US,en;q=0.9'
+        }
+        response = requests.get(url, params=params, headers=headers, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            items = data.get('items', [])
+            products = []
+            
+            for product in items[:60]:
+                try:
+                    title = product.get('title', '')
+                    price = product.get('price')
+                    
+                    if title and price is not None:
+                        # Extract Image
+                        image_url = None
+                        if product.get('images') and len(product.get('images')) > 0:
+                            image_url = product.get('images')[0]
+                        elif product.get('image'):
+                             image_url = product.get('image')
+
+                        # Extract Product URL
+                        # Pattern: https://www.talabat.com/uae/grocery/701679/lulu-hypermarket/product/<slug>/s/<sku>?aid=1308
+                        slug = product.get('slug')
+                        sku = product.get('sku')
+                        
+                        product_url = None
+                        if slug and sku:
+                             product_url = f"https://www.talabat.com/uae/grocery/701679/lulu-hypermarket/product/{slug}/s/{sku}?aid=1308"
+                        
+                        products.append({
+                            'name': title,
+                            'price': f"AED {price}",
+                            'image_url': image_url,
+                            'product_url': product_url
+                        })
+                except:
+                    continue
+            
+            elapsed = time.time() - start_time
+            print(f"[Lulu] Completed in {elapsed:.2f}s - Found {len(products)} products")
+            _search_status['lulu'] = 'complete'
+            return {'products': products if products else [{'name': 'No results found', 'price': 'N/A'}]}
+        else:
+            elapsed = time.time() - start_time
+            print(f"[Lulu] Failed in {elapsed:.2f}s with status code {response.status_code}")
+            _search_status['lulu'] = 'complete'
+            return {'products': [{'name': 'Error fetching data', 'price': 'N/A'}]}
+    except Exception as e:
+        elapsed = time.time() - start_time
+        print(f"[Lulu] Error in {elapsed:.2f}s - {str(e)}")
+        _search_status['lulu'] = 'complete'
+        return {'products': [{'name': f'Error: {str(e)}', 'price': 'N/A'}]}
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -691,20 +770,22 @@ def search():
         return jsonify({'error': 'Please enter an item to search'}), 400
     
     # Reset search status
-    _search_status = {'carrefour': 'ready', 'noon': 'ready', 'amazon': 'ready', 'talabat': 'ready'}
+    _search_status = {'carrefour': 'ready', 'noon': 'ready', 'amazon': 'ready', 'talabat': 'ready', 'lulu': 'ready'}
     
     # Search all stores in parallel for better performance
-    with ThreadPoolExecutor(max_workers=4) as executor:
+    with ThreadPoolExecutor(max_workers=5) as executor:
         carrefour_future = executor.submit(search_carrefour, item)
         noon_future = executor.submit(search_noon, item)
         amazon_future = executor.submit(search_amazon, item)
         talabat_future = executor.submit(search_talabat, item)
+        lulu_future = executor.submit(search_lulu, item)
         
         raw_results = {
             'carrefour': carrefour_future.result(),
             'noon': noon_future.result(),
             'amazon': amazon_future.result(),
-            'talabat': talabat_future.result()
+            'talabat': talabat_future.result(),
+            'lulu': lulu_future.result()
         }
     
     # Return raw results only

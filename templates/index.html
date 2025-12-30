@@ -169,7 +169,7 @@
                 <h3 class="text-lg font-bold text-foreground">Active Stores</h3>
             </div>
             <div
-                class="grid grid-cols-2 md:flex md:flex-wrap md:justify-center gap-3 md:gap-4 mt-2 p-3 md:p-4 bg-gray-50/50 rounded-2xl border border-gray-100">
+                class="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4 mt-2 p-3 md:p-4 bg-gray-50/50 rounded-2xl border border-gray-100">
                 <!-- Carrefour -->
                 <div class="relative overflow-hidden flex flex-col justify-center bg-white border border-gray-200 rounded-xl w-full md:w-40 h-20 shadow-sm transition-all"
                     id="card-carrefour">
@@ -215,6 +215,18 @@
                         <img src="{{ url_for('static', filename='logos/amazon.png') }}" alt="Amazon"
                             class="h-8 w-auto object-contain">
                         <span class="text-xs font-medium text-gray-500" id="label-amazon">Waiting...</span>
+                    </div>
+                </div>
+
+                <!-- Lulu -->
+                <div class="relative overflow-hidden flex flex-col justify-center bg-white border border-gray-200 rounded-xl w-full md:w-40 h-20 shadow-sm transition-all"
+                    id="card-lulu">
+                    <div class="absolute bottom-0 left-0 h-1.5 bg-[#00A651] transition-all duration-300 ease-out"
+                        style="width: 0%" id="progress-lulu"></div>
+                    <div class="flex flex-col items-center gap-2 p-3">
+                        <img src="{{ url_for('static', filename='logos/lulu.png') }}" alt="Lulu"
+                            class="h-8 w-auto object-contain">
+                        <span class="text-xs font-medium text-gray-500" id="label-lulu">Waiting...</span>
                     </div>
                 </div>
             </div>
@@ -345,6 +357,103 @@
             }
         });
     </script>
+    <!-- Smart Basket Modal -->
+    <div id="basketModal"
+        class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden">
+            <!-- Modal Header -->
+            <div class="flex items-center justify-between p-6 border-b border-gray-100 shrink-0">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center text-primary">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="8" cy="21" r="1" />
+                            <circle cx="19" cy="21" r="1" />
+                            <path
+                                d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12" />
+                        </svg>
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-bold text-gray-900">Smart Basket</h2>
+                        <p class="text-sm text-gray-500">Optimizing your grocery trip across stores</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-4">
+                    <button onclick="clearBasket()"
+                        class="text-sm font-medium text-destructive hover:text-destructive/80 transition-colors">Clear
+                        All</button>
+                    <button onclick="toggleBasket()"
+                        class="w-10 h-10 flex items-center justify-center rounded-xl bg-gray-100 hover:bg-gray-200 transition-colors text-gray-500">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M18 6 6 18" />
+                            <path d="m6 6 12 12" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex-1 overflow-y-auto p-6 flex flex-col lg:flex-row gap-8">
+                <!-- Left: Item List -->
+                <div class="flex-1 space-y-4">
+                    <h3 class="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">Your Items (<span
+                            id="basketModalCount">0</span>)</h3>
+                    <div id="basketItemsList" class="space-y-3">
+                        <!-- Items injected here -->
+                    </div>
+                </div>
+
+                <!-- Right: Optimization & Strategies -->
+                <div class="w-full lg:w-96 space-y-6">
+                    <h3 class="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">Shopping Strategies</h3>
+
+                    <div id="optimizationLoading" class="hidden py-12 text-center">
+                        <div
+                            class="spinner w-8 h-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4">
+                        </div>
+                        <p class="text-sm text-gray-500 font-medium">Calculating best deals...</p>
+                    </div>
+
+                    <div id="strategiesContainer" class="space-y-4">
+                        <!-- Strategy Cards injected here -->
+                    </div>
+
+                    <div id="basketEmptyState" class="hidden py-20 text-center">
+                        <div
+                            class="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4 text-gray-300">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24"
+                                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                stroke-linejoin="round">
+                                <circle cx="8" cy="21" r="1" />
+                                <circle cx="19" cy="21" r="1" />
+                                <path
+                                    d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12" />
+                            </svg>
+                        </div>
+                        <p class="text-gray-500 font-medium">Your basket is empty</p>
+                        <p class="text-sm text-gray-400">Add products to see the best optimization</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal Footer -->
+            <div id="basketFooter"
+                class="p-6 bg-gray-50 border-t border-gray-100 flex items-center justify-between shrink-0">
+                <div class="flex items-center gap-6">
+                    <div>
+                        <div class="text-[10px] text-gray-400 uppercase font-bold tracking-tight">Best Total</div>
+                        <div class="text-2xl font-black text-gray-900 leading-none">AED <span id="bestTotal">0.00</span>
+                        </div>
+                    </div>
+                    <div id="savingBadge"
+                        class="hidden px-3 py-1 bg-green-500 text-white text-xs font-bold rounded-lg shadow-sm">
+                        SAVE AED <span id="savedAmount">0.00</span>
+                    </div>
+                </div>
+                <!-- Action button (e.g. Export/Checkout) could go here -->
+            </div>
+        </div>
+    </div>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
 

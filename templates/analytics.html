@@ -188,12 +188,15 @@
                                 Talabat <span class="block text-[10px] text-gray-400 capitalize">Current</span></th>
                             <th
                                 class="text-center px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Lulu <span class="block text-[10px] text-gray-400 capitalize">Current</span></th>
+                            <th
+                                class="text-center px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
                                 Actions</th>
                         </tr>
                     </thead>
                     <tbody id="productsTableBody" class="divide-y divide-gray-100">
                         <tr>
-                            <td colspan="7" class="text-center py-8 text-gray-500">Loading products...</td>
+                            <td colspan="8" class="text-center py-8 text-gray-500">Loading products...</td>
                         </tr>
                     </tbody>
                 </table>
@@ -298,7 +301,7 @@
             } catch (error) {
                 console.error('Error loading products:', error);
                 document.getElementById('productsTableBody').innerHTML =
-                    '<tr><td colspan="7" class="text-center py-8 text-red-500">Error loading products</td></tr>';
+                    '<tr><td colspan="8" class="text-center py-8 text-red-500">Error loading products</td></tr>';
             }
         }
 
@@ -317,7 +320,7 @@
             const products = filteredProducts.length > 0 || document.getElementById('searchProducts').value ? filteredProducts : allProducts;
 
             if (products.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-gray-500">No products found. Search for products to start tracking prices.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-gray-500">No products found. Search for products to start tracking prices.</td></tr>';
                 updatePaginationUI(0, 0, 0);
                 return;
             }
@@ -343,6 +346,7 @@
                     <td class="px-6 py-4 text-center">${formatPrice(stores.noon)}</td>
                     <td class="px-6 py-4 text-center">${formatPrice(stores.amazon)}</td>
                     <td class="px-6 py-4 text-center">${formatPrice(stores.talabat)}</td>
+                    <td class="px-6 py-4 text-center">${formatPrice(stores.lulu)}</td>
                     <td class="px-6 py-4 text-center">
                         <button onclick="showHistory(${p.id}, '${escapeHtml((p.normalized_name || '').replace(/'/g, "\\'"))}')" 
                             class="px-3 py-1 text-xs bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors">
@@ -450,7 +454,8 @@
                 carrefour: { border: 'rgb(59, 130, 246)' },
                 noon: { border: 'rgb(17, 24, 39)' },
                 amazon: { border: 'rgb(255, 153, 0)' },
-                talabat: { border: 'rgb(255, 90, 0)' }
+                talabat: { border: 'rgb(255, 90, 0)' },
+                lulu: { border: 'rgb(0, 166, 81)' }
             };
 
             const datasets = Object.keys(storeData).map(store => ({

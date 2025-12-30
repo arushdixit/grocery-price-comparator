@@ -1,4 +1,4 @@
-# PriceHunt UAE - Dubai Grocery Price Comparator
+# Grocy - Dubai's Smart Grocery Comparator
 
 A powerful web application that compares real-time grocery prices across major Dubai retailers: **Carrefour**, **Noon**, **Amazon.ae**, and **Talabat**.
 

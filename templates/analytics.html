@@ -266,6 +266,9 @@
         // Load products on page load
         document.addEventListener('DOMContentLoaded', loadProducts);
 
+        // Global Dirham Symbol using the official UAE Dirham SVG
+        const DIRHAM_SYMBOL = '<img src="{{ url_for(\'static\', filename=\'logos/uae_dirham.svg\') }}" class="inline-block" style="width: 0.85em; height: 0.85em; vertical-align: baseline;" alt="د.إ">';
+
         // Search Filter (Internal to Analytics)
         document.getElementById('searchProducts').addEventListener('input', filterProducts);
 
@@ -392,7 +395,7 @@
             if (price === undefined || price === null) {
                 return '<span class="text-gray-300">-</span>';
             }
-            return `<span class="font-medium text-gray-900">AED ${parseFloat(price).toFixed(2)}</span>`;
+            return `<span class="font-medium text-gray-900 flex items-center gap-1">${DIRHAM_SYMBOL} ${parseFloat(price).toFixed(2)}</span>`;
         }
 
         async function showHistory(productId, productName) {

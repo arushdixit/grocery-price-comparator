@@ -11,6 +11,9 @@ function toggleRawResults() {
     }
 }
 
+// Global Dirham Symbol using the official UAE Dirham SVG
+const DIRHAM_SYMBOL = '<img src="/static/logos/uae_dirham.svg" class="inline-block" style="width: 0.85em; height: 0.85em; vertical-align: baseline;" alt="د.إ">';
+
 // Filter Logic
 let activeFilterWord = null;
 let cachedOtherMatches = [];
@@ -173,6 +176,9 @@ function renderMatchedProducts(matchedProducts, locations) {
                 }
             }
 
+            // Dirham Symbol (inline for reuse in this scope)
+            const dirhamSVG = '<img src="/static/logos/uae_dirham.svg" class="inline-block" style="width: 0.85em; height: 0.85em; vertical-align: baseline;" alt="د.إ">';
+
             // Main Card Container (Flex Row)
             section += '<div class="flex flex-col md:flex-row items-stretch border border-gray-200 rounded-xl bg-white shadow-sm overflow-hidden hover:shadow-md transition-shadow group">';
 
@@ -188,16 +194,21 @@ function renderMatchedProducts(matchedProducts, locations) {
             // 2. MIDDLE COLUMN: Info & Store Cards - Compact
             section += '<div class="flex-1 p-2 flex flex-col justify-between">';
 
-            // Top: Header
-            section += '<div class="mb-2">';
-            section += `<h3 class="font-bold text-gray-900 text-lg mb-0.5 leading-tight line-clamp-1">${escapeHtml(p.matched_name || '')}</h3>`;
+            // Top: Header with Price History Icon
+            section += '<div class="mb-1.5 flex items-start justify-between">';
+            section += '<div class="flex-1 min-w-0">';
+            section += `<h3 class="font-bold text-gray-900 text-base mb-0.5 leading-tight line-clamp-1">${escapeHtml(p.matched_name || '')}</h3>`;
             if (qtyText) {
-                section += `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">${escapeHtml(qtyText)}</span>`;
+                section += `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">${escapeHtml(qtyText)}</span>`;
             }
             section += '</div>';
+            // Price History Icon (top-right)
+            const safeName = (p.matched_name || '').replace(/'/g, "\\'");
+            const escapedName = escapeHtml(safeName);
+            section += '</div>';
 
-            // Bottom: Store Cards Grid
-            section += '<div class="grid grid-cols-2 md:grid-cols-5 gap-3">';
+            // Bottom: Store Cards Grid (increased gap)
+            section += '<div class="grid grid-cols-2 md:grid-cols-5 gap-4">';
 
             const storeConfigs = {
                 carrefour: { name: 'Carrefour', logo: '/static/logos/carrefour.png', color: 'blue', initial: 'C' },
@@ -225,17 +236,17 @@ function renderMatchedProducts(matchedProducts, locations) {
                     // Logo Only
                     section += `<img src="${escapeHtml(config.logo)}" alt="${config.name}" class="h-5 w-auto object-contain" />`;
 
-                    // Trend Indicator
+                    // Trend Indicator (with proper z-index to be clickable)
                     const trend = (p.trends || {})[store];
                     if (trend === 'up') {
-                        section += `<span class="text-[14px] text-red-500 font-bold flex items-center gap-0.5" title="Price increased" onclick="showPriceHistory(${p.product_id}, '${escapeHtml((p.normalized_name || '').replace(/'/g, "\\'"))}')">🔺</span>`;
+                        section += `<span class="relative z-10 text-[14px] text-red-500 font-bold flex items-center gap-0.5 cursor-pointer" title="Price increased" onclick="event.stopPropagation(); event.preventDefault(); showPriceHistory('${escapedName}')">🔺</span>`;
                     } else if (trend === 'down') {
-                        section += `<span class="text-[14px] text-green-500 font-bold flex items-center gap-0.5" title="Price halved/dropped!" onclick="showPriceHistory(${p.product_id}, '${escapeHtml((p.normalized_name || '').replace(/'/g, "\\'"))}')">🥬</span>`;
+                        section += `<span class="relative z-10 text-[14px] text-green-500 font-bold flex items-center gap-0.5 cursor-pointer" title="Price dropped!" onclick="event.stopPropagation(); event.preventDefault(); showPriceHistory('${escapedName}')">🎉</span>`;
                     }
                     section += '</div>';
 
-                    // Price
-                    section += `<div class="text-base font-bold ${isBest ? 'text-green-700' : 'text-gray-900'}">AED ${info.price.toFixed(2)}</div>`;
+                    // Price with Dirham Symbol
+                    section += `<div class="text-base font-bold ${isBest ? 'text-green-700' : 'text-gray-900'} flex items-center gap-0.5">${dirhamSVG}<span>${info.price.toFixed(2)}</span></div>`;
 
                     // View Link
                     if (stores[store].product_url) {
@@ -257,36 +268,34 @@ function renderMatchedProducts(matchedProducts, locations) {
             section += '</div>'; // End Store Grid
             section += '</div>'; // End Middle Column
 
-            // 3. RIGHT COLUMN: Best Deal Showcase
+            // 3. RIGHT COLUMN: Best Deal Showcase (more compact with price history in corner)
             if (minPrice !== null) {
                 const bestUnitPrice = baseQty > 0 ? (minPrice / baseQty).toFixed(2) : null;
 
-                section += '<div class="w-full md:w-40 bg-gray-50 border-l border-gray-100 p-3 flex flex-col justify-center">';
-                section += '<div class="text-gray-400 text-xs font-medium mb-1 uppercase tracking-wider">Best Deal</div>';
-                section += `<div class="text-2xl font-bold text-gray-900 leading-none mb-1">${minPrice.toFixed(2)}</div>`;
-                section += '<div class="text-xs text-gray-500 font-medium">AED</div>';
+                section += '<div class="relative w-full md:w-36 bg-gray-50 border-l border-gray-100 p-2.5 flex flex-col justify-center">';
+
+                // Price History Icon (top-right corner)
+                section += `<button onclick="event.stopPropagation(); showPriceHistory('${escapedName}')" class="absolute top-2 right-2 p-1 text-gray-400 hover:text-primary hover:bg-white rounded-lg transition-colors z-10" title="View Price History">`;
+                section += '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>';
+                section += '</button>';
+
+                section += '<div class="text-gray-400 text-[10px] font-medium mb-0.5 uppercase tracking-wider">Best Deal</div>';
+                section += `<div class="text-xl font-bold text-gray-900 leading-none mb-0.5 flex items-center gap-1">${dirhamSVG}<span>${minPrice.toFixed(2)}</span></div>`;
 
                 if (bestUnitPrice) {
-                    section += `<div class="mt-2 pt-2 border-t border-gray-200">`;
-                    section += `<div class="text-[10px] text-gray-400">Unit Price</div>`;
-                    section += `<div class="text-xs font-semibold text-gray-600">${bestUnitPrice} AED/${baseUnit}</div>`;
+                    section += `<div class="mt-1.5 pt-1.5 border-t border-gray-200">`;
+                    section += `<div class="text-[9px] text-gray-400">Unit Price</div>`;
+                    section += `<div class="text-xs font-semibold text-gray-600 flex items-center gap-0.5">${dirhamSVG}<span>${bestUnitPrice}/${baseUnit}</span></div>`;
                     section += `</div>`;
                 }
 
-                // Price History Button
-                const safeName = (p.matched_name || '').replace(/'/g, "\\'");
-                const escapedName = escapeHtml(safeName);
                 // Add to Basket Button
-                section += `<button onclick="addToSmartBasket(${JSON.stringify(p).replace(/"/g, '&quot;')})" class="mt-2 w-full text-xs px-2 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-all font-semibold shadow-sm active:scale-95 flex items-center justify-center gap-1">
+                section += `<button onclick="event.stopPropagation(); addToSmartBasket(${JSON.stringify(p).replace(/"/g, '&quot;')})" class="mt-2 w-full text-xs px-2 py-1.5 bg-primary text-white rounded-lg hover:bg-primary/90 transition-all font-semibold shadow-sm active:scale-95 flex items-center justify-center gap-1">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
-                    Add to Basket
+                    Add
                 </button>`;
 
-                section += `<button onclick="showPriceHistory('${escapedName}')" class="mt-2 w-full text-[10px] px-2 py-1 text-gray-500 hover:text-primary transition-colors flex items-center justify-center gap-1">
-                    Price History
-                </button>`;
-
-                section += '</div>';
+                section += '</div>';;
             } else {
                 // Empty state for right column if no prices
                 section += '<div class="w-full md:w-40 bg-gray-50 border-l border-gray-100 p-3 flex items-center justify-center text-gray-300 text-xs">No prices</div>';
@@ -1033,7 +1042,7 @@ function calculateAndRenderStrategies() {
             <div class="bg-white border-2 border-primary/20 rounded-2xl p-5 shadow-sm">
                 <div class="flex items-center justify-between mb-4">
                     <span class="px-2 py-1 bg-primary/10 text-primary text-[10px] font-bold rounded uppercase tracking-wider">Fastest & Simplest</span>
-                    <span class="text-lg font-bold text-gray-900">AED ${bestSingle.total.toFixed(2)}</span>
+                    <span class="text-lg font-bold text-gray-900 flex items-center gap-1">${DIRHAM_SYMBOL} ${bestSingle.total.toFixed(2)}</span>
                 </div>
                 <div class="flex items-center gap-3 mb-4">
                     <img src="/static/logos/${bestSingle.store}.png" class="h-6 w-auto object-contain">
@@ -1043,8 +1052,8 @@ function calculateAndRenderStrategies() {
                     <p class="text-[11px] text-amber-600 font-medium mb-3">⚠️ Missing ${bestSingle.missingItems.length} items (e.g. ${escapeHtml(bestSingle.missingItems[0])})</p>
                 ` : '<p class="text-[11px] text-green-600 font-medium mb-3">✅ All items available!</p>'}
                 <div class="flex justify-between text-xs text-gray-500 pt-3 border-t border-gray-50">
-                    <span>Items: AED ${bestSingle.subtotal.toFixed(2)}</span>
-                    <span>Fee: ${bestSingle.delivery > 0 ? `AED ${bestSingle.delivery.toFixed(2)}` : 'FREE'}</span>
+                    <span>Items: ${DIRHAM_SYMBOL} ${bestSingle.subtotal.toFixed(2)}</span>
+                    <span>Fee: ${bestSingle.delivery > 0 ? `${DIRHAM_SYMBOL} ${bestSingle.delivery.toFixed(2)}` : 'FREE'}</span>
                 </div>
             </div>
         `;
@@ -1057,7 +1066,7 @@ function calculateAndRenderStrategies() {
             <div class="bg-gray-900 rounded-2xl p-5 shadow-xl text-white">
                 <div class="flex items-center justify-between mb-4">
                     <span class="px-2 py-1 bg-green-500 text-white text-[10px] font-bold rounded uppercase tracking-wider">Lowest Price</span>
-                    <span class="text-lg font-bold text-white">AED ${bestSplit.total.toFixed(2)}</span>
+                    <span class="text-lg font-bold text-white flex items-center gap-1">${DIRHAM_SYMBOL} ${bestSplit.total.toFixed(2)}</span>
                 </div>
                 <div class="space-y-3 mb-4">
                     ${Object.entries(bestSplit.storeBreakdown).map(([store, data]) => `
@@ -1066,13 +1075,13 @@ function calculateAndRenderStrategies() {
                                 <img src="/static/logos/${store}.png" class="h-4 w-auto object-contain grayscale-0 brightness-110">
                                 <span class="text-xs font-medium">${data.count} items</span>
                             </div>
-                            <span class="text-xs text-gray-400">AED ${data.subtotal.toFixed(2)} + ${data.delivery > 0 ? `AED ${data.delivery.toFixed(2)}` : 'Free'} fee</span>
+                            <span class="text-xs text-gray-400">${DIRHAM_SYMBOL} ${data.subtotal.toFixed(2)} + ${data.delivery > 0 ? `${DIRHAM_SYMBOL} ${data.delivery.toFixed(2)}` : 'Free'} fee</span>
                         </div>
                     `).join('')}
                 </div>
                 <div class="pt-3 border-t border-white/10 flex items-center justify-between">
                     <span class="text-[10px] text-gray-400">Total Savings</span>
-                    <span class="text-xs font-bold text-green-400">${savings > 0 ? `AED ${savings.toFixed(2)} cheaper than single store` : 'Best possible price'}</span>
+                    <span class="text-xs font-bold text-green-400">${savings > 0 ? `${DIRHAM_SYMBOL} ${savings.toFixed(2)} cheaper than single store` : 'Best possible price'}</span>
                 </div>
             </div>
         `;

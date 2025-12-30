@@ -161,7 +161,7 @@
     </header>
 
     <!-- Header Section -->
-    <div class="max-w-4xl mx-auto px-4 py-8">
+    <div class="max-w-5xl mx-auto px-4 py-8">
         <div class="bg-white rounded-2xl shadow-lg p-4 text-center">
 
             <!-- Store Status -->
@@ -442,17 +442,23 @@
                 <div class="flex items-center gap-6">
                     <div>
                         <div class="text-[10px] text-gray-400 uppercase font-bold tracking-tight">Best Total</div>
-                        <div class="text-2xl font-black text-gray-900 leading-none">AED <span id="bestTotal">0.00</span>
+                        <div class="text-2xl font-black text-gray-900 leading-none flex items-center gap-1">
+                            <img src="{{ url_for('static', filename='logos/uae_dirham.svg') }}" class="inline-block"
+                                style="width: 0.85em; height: 0.85em; vertical-align: baseline;" alt="د.إ">
+                            <span id="bestTotal">0.00</span>
                         </div>
                     </div>
-                    <div id="savingBadge"
-                        class="hidden px-3 py-1 bg-green-500 text-white text-xs font-bold rounded-lg shadow-sm">
-                        SAVE AED <span id="savedAmount">0.00</span>
-                    </div>
                 </div>
-                <!-- Action button (e.g. Export/Checkout) could go here -->
+                <div id="savingBadge"
+                    class="hidden px-3 py-1 bg-green-500 text-white text-xs font-bold rounded-lg shadow-sm">
+                    SAVE <img src="{{ url_for('static', filename='logos/uae_dirham.svg') }}" class="inline-block"
+                        style="width: 0.85em; height: 0.85em; vertical-align: baseline;" alt="د.إ"> <span
+                        id="savedAmount">0.00</span>
+                </div>
             </div>
+            <!-- Action button (e.g. Export/Checkout) could go here -->
         </div>
+    </div>
     </div>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>

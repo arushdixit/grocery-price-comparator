@@ -73,9 +73,6 @@ def get_chrome_driver():
     chrome_options.add_argument('--disable-blink-features=AutomationControlled')
     chrome_options.add_argument('user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
     
-    # OPTIMIZATION: Eager loading strategy
-    chrome_options.page_load_strategy = 'eager'
-    
     # OPTIMIZATION: Disable images to save bandwidth
     prefs = {"profile.managed_default_content_settings.images": 2}
     chrome_options.add_experimental_option("prefs", prefs)
@@ -83,12 +80,17 @@ def get_chrome_driver():
     # Check for Browserless.io Token
     browserless_token = os.environ.get('BROWSERLESS_TOKEN')
     if browserless_token:
-        print("[Browser] Connecting to Browserless.io...")
-        browserless_url = f"https://production-sfo.browserless.io/webdriver?token={browserless_token}"
-        return webdriver.Remote(
-            command_executor=browserless_url,
-            options=chrome_options
-        )
+        print("[Browser] Connecting to Browserless.io via capabilities...")
+        browserless_url = "https://chrome.browserless.io/webdriver"
+        chrome_options.set_capability('browserless:token', browserless_token)
+        try:
+            return webdriver.Remote(
+                command_executor=browserless_url,
+                options=chrome_options
+            )
+        except Exception as e:
+            print(f"[Browser] Failed to connect to Browserless: {str(e)}")
+            raise e
     
     print("[Browser] Initializing local Chrome...")
     return webdriver.Chrome(options=chrome_options)
@@ -783,21 +785,36 @@ def search():
     # Reset search status
     _search_status = {'carrefour': 'ready', 'noon': 'ready', 'amazon': 'ready', 'talabat': 'ready', 'lulu': 'ready'}
     
-    # Search all stores in parallel for better performance
-    with ThreadPoolExecutor(max_workers=5) as executor:
-        carrefour_future = executor.submit(search_carrefour, item)
-        noon_future = executor.submit(search_noon, item)
-        amazon_future = executor.submit(search_amazon, item)
-        talabat_future = executor.submit(search_talabat, item)
-        lulu_future = executor.submit(search_lulu, item)
-        
+    # Search stores
+    # NOTE: Using sequential search because Browserless Concurrency Limit is 1
+    # Parallel search would cause "Session limit reached" errors
+    browserless_token = os.environ.get('BROWSERLESS_TOKEN')
+    
+    if browserless_token:
+        print("[Search] Using sequential mode due to Browserless concurrency limits")
         raw_results = {
-            'carrefour': carrefour_future.result(),
-            'noon': noon_future.result(),
-            'amazon': amazon_future.result(),
-            'talabat': talabat_future.result(),
-            'lulu': lulu_future.result()
+            'carrefour': search_carrefour(item),
+            'noon': search_noon(item),
+            'amazon': search_amazon(item),
+            'talabat': search_talabat(item),
+            'lulu': search_lulu(item)
         }
+    else:
+        # Local mode - parallel is fine
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            carrefour_future = executor.submit(search_carrefour, item)
+            noon_future = executor.submit(search_noon, item)
+            amazon_future = executor.submit(search_amazon, item)
+            talabat_future = executor.submit(search_talabat, item)
+            lulu_future = executor.submit(search_lulu, item)
+            
+            raw_results = {
+                'carrefour': carrefour_future.result(),
+                'noon': noon_future.result(),
+                'amazon': amazon_future.result(),
+                'talabat': talabat_future.result(),
+                'lulu': lulu_future.result()
+            }
     
     # Return raw results only
     return jsonify({
@@ -873,34 +890,21 @@ def preload_single_browser(store_name, base_url, cookies_file):
         print(f"[Startup] Error preloading {store_name}: {str(e)}")
 
 def preload_browsers():
-    """Preload browsers in parallel on startup for faster first query"""
-    print("[Startup] Preloading browsers in parallel...")
+    """Preload browsers for faster first query"""
+    # NOTE: Sequential preloading if using Browserless due to Concurrency Limit 1
+    browserless_token = os.environ.get('BROWSERLESS_TOKEN')
     
-    # Preload both browsers in parallel using ThreadPoolExecutor
-    with ThreadPoolExecutor(max_workers=3) as executor:
-        carrefour_future = executor.submit(
-            preload_single_browser, 
-            'Carrefour', 
-            'https://www.carrefouruae.com/mafuae/en/', 
-            CARREFOUR_COOKIES_FILE
-        )
-        noon_future = executor.submit(
-            preload_single_browser,
-            'Noon',
-            'https://minutes.noon.com/uae-en/',
-            NOON_COOKIES_FILE
-        )
-        amazon_future = executor.submit(
-            preload_single_browser,
-            'Amazon',
-            'https://www.amazon.ae/fmc/storefront?almBrandId=sAuWWBROaG',
-            AMAZON_COOKIES_FILE
-        )
-        
-        # Wait for both to complete
-        carrefour_future.result()
-        noon_future.result()
-        amazon_future.result()
+    if browserless_token:
+        print("[Startup] Preloading browsers sequentially (Browserless limit 1)...")
+        preload_single_browser('Carrefour', 'https://www.carrefouruae.com/mafuae/en/', CARREFOUR_COOKIES_FILE)
+        preload_single_browser('Noon', 'https://minutes.noon.com/uae-en/', NOON_COOKIES_FILE)
+        preload_single_browser('Amazon', 'https://www.amazon.ae/fmc/storefront?almBrandId=sAuWWBROaG', AMAZON_COOKIES_FILE)
+    else:
+        print("[Startup] Preloading browsers in parallel (Local)...")
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            executor.submit(preload_single_browser, 'Carrefour', 'https://www.carrefouruae.com/mafuae/en/', CARREFOUR_COOKIES_FILE)
+            executor.submit(preload_single_browser, 'Noon', 'https://minutes.noon.com/uae-en/', NOON_COOKIES_FILE)
+            executor.submit(preload_single_browser, 'Amazon', 'https://www.amazon.ae/fmc/storefront?almBrandId=sAuWWBROaG', AMAZON_COOKIES_FILE)
     
     print("[Startup] Browser preloading complete")
 

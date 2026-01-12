@@ -3,7 +3,7 @@ services:
     name: grocery-price-comparator
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app
+    startCommand: python -m gunicorn app:app
     envVars:
       - key: DATABASE_URL
         sync: false

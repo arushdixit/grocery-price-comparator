@@ -201,7 +201,7 @@ def search_carrefour(item):
             print(f"[Carrefour] Timeout waiting for products: {str(e)}")
         
         # Parse with BeautifulSoup
-        soup = BeautifulSoup(driver.page_source, 'lxml')
+        soup = BeautifulSoup(driver.page_source, 'html.parser')
         products = []
         
         # Find product containers - using robust parent selector
@@ -344,7 +344,7 @@ def search_noon(item):
 
                 
         # Parse with BeautifulSoup
-        soup = BeautifulSoup(driver.page_source, 'lxml')
+        soup = BeautifulSoup(driver.page_source, 'html.parser')
         products = []
         
         # Find single product items directly
@@ -469,7 +469,7 @@ def search_amazon(item):
             print(f"[Amazon] Timeout waiting for products: {str(e)}")
 
         # Parse with BeautifulSoup
-        soup = BeautifulSoup(driver.page_source, 'lxml')
+        soup = BeautifulSoup(driver.page_source, 'html.parser')
         products = []
         
         # Find product containers

@@ -65,7 +65,7 @@ _browser_locations = {
 }
 
 def get_chrome_driver():
-    """Create a new Chrome driver with standard options"""
+    """Create a new Chrome driver (Local or Browserless.io)"""
     chrome_options = Options()
     chrome_options.add_argument('--headless')
     chrome_options.add_argument('--no-sandbox')
@@ -73,13 +73,24 @@ def get_chrome_driver():
     chrome_options.add_argument('--disable-blink-features=AutomationControlled')
     chrome_options.add_argument('user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
     
-    # OPTIMIZATION: Eager loading strategy (don't wait for all resources)
+    # OPTIMIZATION: Eager loading strategy
     chrome_options.page_load_strategy = 'eager'
     
     # OPTIMIZATION: Disable images to save bandwidth
     prefs = {"profile.managed_default_content_settings.images": 2}
     chrome_options.add_experimental_option("prefs", prefs)
     
+    # Check for Browserless.io Token
+    browserless_token = os.environ.get('BROWSERLESS_TOKEN')
+    if browserless_token:
+        print("[Browser] Connecting to Browserless.io...")
+        browserless_url = f"https://production-sfo.browserless.io/webdriver?token={browserless_token}"
+        return webdriver.Remote(
+            command_executor=browserless_url,
+            options=chrome_options
+        )
+    
+    print("[Browser] Initializing local Chrome...")
     return webdriver.Chrome(options=chrome_options)
 
 def get_or_create_browser(store_name, base_url, cookies_file=None):
@@ -915,4 +926,8 @@ if __name__ == '__main__':
         # Start scraper
         threading.Thread(target=run_scheduled_scraping, daemon=True).start()
     
-    app.run(debug=True, host='0.0.0.0', port=9000)
+    # Production setup for Render/Railway
+    port = int(os.environ.get("PORT", 9000))
+    debug = os.environ.get("FLASK_DEBUG", "False").lower() == "true"
+    
+    app.run(debug=debug, host='0.0.0.0', port=port)

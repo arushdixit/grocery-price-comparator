@@ -1,86 +1,82 @@
-"""Database models and initialization for price tracking with CDC Type 2"""
-import sqlite3
+"""Database models and initialization for price tracking with PostgreSQL (Supabase)"""
+import psycopg2
+from psycopg2.extras import DictCursor
 import os
 from datetime import date, datetime
 from contextlib import contextmanager
 from typing import List, Dict, Optional, Any
+from dotenv import load_dotenv
 
-DB_PATH = 'grocery_prices.db'
+load_dotenv()
 
+# Use DATABASE_URL from environment
+DATABASE_URL = os.environ.get('DATABASE_URL')
 
 def init_database():
-    """Initialize database with required tables using CDC Type 2 schema"""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    
-    # Products table - canonical product identity (matched across stores)
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS products (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            normalized_name TEXT UNIQUE NOT NULL,
-            brand TEXT,
-            quantity_value REAL,
-            quantity_unit TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    
-    # Store products table - store-specific product information
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS store_products (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            product_id INTEGER NOT NULL,
-            store_name TEXT NOT NULL,
-            store_product_name TEXT NOT NULL,
-            product_url TEXT,
-            image_url TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY(product_id) REFERENCES products(id),
-            UNIQUE(product_id, store_name)
-        )
-    ''')
-    
-    # Price history table - CDC Type 2 with effective_date
-    # Only one price per store_product per day (latest wins)
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS price_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            store_product_id INTEGER NOT NULL,
-            price REAL NOT NULL,
-            effective_date DATE NOT NULL,
-            is_current BOOLEAN DEFAULT 1,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY(store_product_id) REFERENCES store_products(id),
-            UNIQUE(store_product_id, effective_date)
-        )
-    ''')
-    
-    # Create indexes for performance
-    cursor.execute('''
-        CREATE INDEX IF NOT EXISTS idx_price_history_store_product 
-        ON price_history(store_product_id, effective_date DESC)
-    ''')
-    
-    cursor.execute('''
-        CREATE INDEX IF NOT EXISTS idx_store_products_product 
-        ON store_products(product_id)
-    ''')
-    
-    cursor.execute('''
-        CREATE INDEX IF NOT EXISTS idx_price_history_current 
-        ON price_history(is_current, store_product_id)
-    ''')
-    
-    conn.commit()
-    conn.close()
-    print("[Database] Initialized with CDC Type 2 schema")
+    """Initialize database with required tables using PostgreSQL schema"""
+    if not DATABASE_URL:
+        print("[Database] Skipping initialization: DATABASE_URL not set")
+        return
 
+    try:
+        conn = psycopg2.connect(DATABASE_URL)
+        cursor = conn.cursor()
+        
+        # Products table - canonical product identity
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS products (
+                id SERIAL PRIMARY KEY,
+                normalized_name TEXT UNIQUE NOT NULL,
+                brand TEXT,
+                quantity_value REAL,
+                quantity_unit TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Store products table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS store_products (
+                id SERIAL PRIMARY KEY,
+                product_id INTEGER NOT NULL REFERENCES products(id),
+                store_name TEXT NOT NULL,
+                store_product_name TEXT NOT NULL,
+                product_url TEXT,
+                image_url TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(product_id, store_name)
+            )
+        ''')
+        
+        # Price history table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS price_history (
+                id SERIAL PRIMARY KEY,
+                store_product_id INTEGER NOT NULL REFERENCES store_products(id),
+                price REAL NOT NULL,
+                effective_date DATE NOT NULL,
+                is_current BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(store_product_id, effective_date)
+            )
+        ''')
+        
+        # Create indexes
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_price_history_store_product ON price_history(store_product_id, effective_date DESC)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_store_products_product ON store_products(product_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_price_history_current ON price_history(is_current, store_product_id)')
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        print("[Database] Initialized PostgreSQL schema")
+    except Exception as e:
+        print(f"[Database] Error initializing database: {e}")
 
 @contextmanager
 def get_db_connection():
-    """Context manager for database connections"""
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    """Context manager for PostgreSQL database connections"""
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=DictCursor)
     try:
         yield conn
         conn.commit()
@@ -90,18 +86,19 @@ def get_db_connection():
     finally:
         conn.close()
 
-
 def upsert_product(cursor, normalized_name: str, brand: str = None, 
                    quantity_value: float = None, quantity_unit: str = None) -> int:
     """Insert or get product ID"""
     cursor.execute('''
-        INSERT OR IGNORE INTO products (normalized_name, brand, quantity_value, quantity_unit)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO products (normalized_name, brand, quantity_value, quantity_unit)
+        VALUES (%s, %s, %s, %s)
+        ON CONFLICT (normalized_name) DO UPDATE SET
+            brand = COALESCE(excluded.brand, products.brand),
+            quantity_value = COALESCE(excluded.quantity_value, products.quantity_value),
+            quantity_unit = COALESCE(excluded.quantity_unit, products.quantity_unit)
+        RETURNING id
     ''', (normalized_name, brand, quantity_value, quantity_unit))
-    
-    cursor.execute('SELECT id FROM products WHERE normalized_name = ?', (normalized_name,))
     return cursor.fetchone()[0]
-
 
 def upsert_store_product(cursor, product_id: int, store_name: str, 
                          store_product_name: str, product_url: str = None,
@@ -109,66 +106,39 @@ def upsert_store_product(cursor, product_id: int, store_name: str,
     """Insert or get store product ID"""
     cursor.execute('''
         INSERT INTO store_products (product_id, store_name, store_product_name, product_url, image_url)
-        VALUES (?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s)
         ON CONFLICT(product_id, store_name) DO UPDATE SET
             store_product_name = excluded.store_product_name,
             product_url = COALESCE(excluded.product_url, store_products.product_url),
             image_url = COALESCE(excluded.image_url, store_products.image_url)
+        RETURNING id
     ''', (product_id, store_name, store_product_name, product_url, image_url))
-    
-    cursor.execute('''
-        SELECT id FROM store_products WHERE product_id = ? AND store_name = ?
-    ''', (product_id, store_name))
     return cursor.fetchone()[0]
 
-
 def record_price(cursor, store_product_id: int, price: float, effective_date: date = None):
-    """
-    Record a price using CDC Type 2 logic.
-    - If no price exists for this date, insert new row
-    - If price exists for this date, update it (last wins)
-    - Mark previous prices as not current
-    """
+    """Record a price using CDC Type 2 logic."""
     if effective_date is None:
         effective_date = date.today()
     
-    # Upsert price for this date (INSERT or UPDATE if same date)
+    # Upsert price for this date
     cursor.execute('''
         INSERT INTO price_history (store_product_id, price, effective_date, is_current)
-        VALUES (?, ?, ?, 1)
+        VALUES (%s, %s, %s, TRUE)
         ON CONFLICT(store_product_id, effective_date) DO UPDATE SET
             price = excluded.price,
-            is_current = 1,
+            is_current = TRUE,
             created_at = CURRENT_TIMESTAMP
-    ''', (store_product_id, price, effective_date.isoformat()))
+    ''', (store_product_id, price, effective_date))
     
-    # Mark older records as not current (keep only latest as current)
+    # Mark older records as not current
     cursor.execute('''
         UPDATE price_history 
-        SET is_current = 0 
-        WHERE store_product_id = ? AND effective_date < ?
-    ''', (store_product_id, effective_date.isoformat()))
-
+        SET is_current = FALSE 
+        WHERE store_product_id = %s AND effective_date < %s
+    ''', (store_product_id, effective_date))
 
 def save_search_results(matched_products: List[Dict]) -> int:
-    """
-    Save matched products and prices from a search.
-    Returns the number of products saved.
-    
-    Args:
-        matched_products: List from match_products() with structure:
-            {
-                'matched_name': str,
-                'brand': str,
-                'quantity_value': float,
-                'quantity_unit': str,
-                'primary_image': str,
-                'stores': {
-                    'carrefour': {'name': str, 'price': float, 'product_url': str},
-                    ...
-                }
-            }
-    """
+    """Save matched products and prices from a search."""
     if not matched_products:
         return 0
     
@@ -183,7 +153,6 @@ def save_search_results(matched_products: List[Dict]) -> int:
             if not matched_name:
                 continue
             
-            # 1. Upsert canonical product
             product_id = upsert_product(
                 cursor,
                 normalized_name=matched_name,
@@ -192,7 +161,6 @@ def save_search_results(matched_products: List[Dict]) -> int:
                 quantity_unit=product.get('quantity_unit')
             )
             
-            # 2. Process each store
             stores = product.get('stores', {})
             primary_image = product.get('primary_image')
             
@@ -200,7 +168,6 @@ def save_search_results(matched_products: List[Dict]) -> int:
                 if not store_data or store_data.get('price') is None:
                     continue
                 
-                # Upsert store-specific product
                 store_product_id = upsert_store_product(
                     cursor,
                     product_id=product_id,
@@ -210,7 +177,6 @@ def save_search_results(matched_products: List[Dict]) -> int:
                     image_url=primary_image
                 )
                 
-                # Record price (CDC Type 2)
                 record_price(cursor, store_product_id, store_data['price'], today)
             
             saved_count += 1
@@ -218,12 +184,8 @@ def save_search_results(matched_products: List[Dict]) -> int:
     print(f"[Database] Saved {saved_count} products with prices")
     return saved_count
 
-
 def get_price_history(product_id: int, days: int = 30) -> List[Dict]:
-    """
-    Get price history for a product across all stores.
-    Returns list of {store_name, date, price} records.
-    """
+    """Get price history for a product across all stores."""
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute('''
@@ -234,13 +196,12 @@ def get_price_history(product_id: int, days: int = 30) -> List[Dict]:
                 sp.store_product_name
             FROM price_history ph
             JOIN store_products sp ON ph.store_product_id = sp.id
-            WHERE sp.product_id = ?
-            AND ph.effective_date >= date('now', '-' || ? || ' days')
+            WHERE sp.product_id = %s
+            AND ph.effective_date >= CURRENT_DATE - (%s || ' days')::INTERVAL
             ORDER BY ph.effective_date DESC, sp.store_name
         ''', (product_id, days))
         
         return [dict(row) for row in cursor.fetchall()]
-
 
 def get_db_stats() -> Dict[str, int]:
     """Get total counts for products and price history records"""
@@ -257,24 +218,19 @@ def get_db_stats() -> Dict[str, int]:
             'price_count': price_count
         }
 
-
 def get_product_by_name(matched_name: str) -> Optional[Dict]:
     """Get product by its normalized/matched name"""
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute('''
             SELECT id, normalized_name, brand, quantity_value, quantity_unit
-            FROM products WHERE normalized_name = ?
+            FROM products WHERE normalized_name = %s
         ''', (matched_name,))
         row = cursor.fetchone()
         return dict(row) if row else None
 
-
 def get_all_tracked_products(limit: Optional[int] = None) -> List[Dict]:
-    """
-    Get all tracked products with their latest prices from each store.
-    For analytics dashboard.
-    """
+    """Get all tracked products with their latest prices."""
     with get_db_connection() as conn:
         cursor = conn.cursor()
         
@@ -287,9 +243,9 @@ def get_all_tracked_products(limit: Optional[int] = None) -> List[Dict]:
                 p.quantity_unit,
                 p.created_at,
                 (
-                    SELECT GROUP_CONCAT(sp2.store_name || ':' || ph2.price, '|')
+                    SELECT STRING_AGG(sp2.store_name || ':' || ph2.price, '|')
                     FROM store_products sp2
-                    JOIN price_history ph2 ON sp2.id = ph2.store_product_id AND ph2.is_current = 1
+                    JOIN price_history ph2 ON sp2.id = ph2.store_product_id AND ph2.is_current = TRUE
                     WHERE sp2.product_id = p.id
                 ) as current_prices
             FROM products p
@@ -297,15 +253,14 @@ def get_all_tracked_products(limit: Optional[int] = None) -> List[Dict]:
         '''
         
         if limit is not None:
-            query += f" LIMIT {int(limit)}"
-            cursor.execute(query)
+            query += " LIMIT %s"
+            cursor.execute(query, (limit,))
         else:
             cursor.execute(query)
         
         results = []
         for row in cursor.fetchall():
             item = dict(row)
-            # Parse current_prices string into dict
             prices_str = item.pop('current_prices', '')
             item['stores'] = {}
             if prices_str:
@@ -320,21 +275,18 @@ def get_all_tracked_products(limit: Optional[int] = None) -> List[Dict]:
         
         return results
 
-
 def get_price_comparison(product_id: int) -> Dict:
     """Get current prices for a product across all stores"""
     with get_db_connection() as conn:
         cursor = conn.cursor()
         
-        # Get product info
-        cursor.execute('SELECT * FROM products WHERE id = ?', (product_id,))
+        cursor.execute('SELECT * FROM products WHERE id = %s', (product_id,))
         product_row = cursor.fetchone()
         if not product_row:
             return {}
         
         result = dict(product_row)
         
-        # Get current prices
         cursor.execute('''
             SELECT 
                 sp.store_name,
@@ -344,8 +296,8 @@ def get_price_comparison(product_id: int) -> Dict:
                 ph.price,
                 ph.effective_date
             FROM store_products sp
-            JOIN price_history ph ON sp.id = ph.store_product_id AND ph.is_current = 1
-            WHERE sp.product_id = ?
+            JOIN price_history ph ON sp.id = ph.store_product_id AND ph.is_current = TRUE
+            WHERE sp.product_id = %s
         ''', (product_id,))
         
         result['stores'] = {}
@@ -360,26 +312,20 @@ def get_price_comparison(product_id: int) -> Dict:
         
         return result
 
-
 def get_price_trends(product_id: int) -> Dict[str, str]:
-    """
-    Compare current prices with previous prices to determine trends.
-    Returns a dict of {store_name: 'up'|'down'|'stable'|'new'}
-    """
+    """Compare current prices with previous prices to determine trends."""
     trends = {}
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            
-            # Get all store products for this product
-            cursor.execute('SELECT id, store_name FROM store_products WHERE product_id = ?', (product_id,))
+            cursor.execute('SELECT id, store_name FROM store_products WHERE product_id = %s', (product_id,))
             rows = cursor.fetchall()
             
-            for sp_id, store_name in rows:
-                # Get last two distinct prices
+            for row in rows:
+                sp_id, store_name = row['id'], row['store_name']
                 cursor.execute('''
                     SELECT price FROM price_history 
-                    WHERE store_product_id = ? 
+                    WHERE store_product_id = %s 
                     ORDER BY effective_date DESC, created_at DESC 
                     LIMIT 2
                 ''', (sp_id,))
@@ -397,10 +343,8 @@ def get_price_trends(product_id: int) -> Dict[str, str]:
                     trends[store_name] = 'new'
     except Exception as e:
         print(f"Error fetching trends: {e}")
-                
     return trends
 
-
-# Initialize database on import
-if not os.path.exists(DB_PATH):
+# Initialize database on import if URL is present
+if DATABASE_URL:
     init_database()

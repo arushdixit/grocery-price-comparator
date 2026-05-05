@@ -587,17 +587,25 @@ def match_products(store_results: Dict[str, Dict], openrouter_api_key: str, quer
         all_parsed = []
         
         for store_name in ['carrefour', 'noon', 'talabat', 'amazon', 'lulu']:
-            products = store_results.get(store_name, {}).get('products', [])
-            products = [p for p in products if 'Error' not in p.get('name', '') and p.get('name') != 'No results found']
+            store_data = store_results.get(store_name, {})
+            # Bullet-proof store_data handling
+            if isinstance(store_data, list):
+                products_list = store_data
+            elif isinstance(store_data, dict):
+                products_list = store_data.get('products', [])
+            else:
+                products_list = []
+                
+            # Filter and ensure each product is a dict
+            valid_products = []
+            for p in products_list:
+                if isinstance(p, dict) and 'name' in p:
+                    if 'Error' not in p.get('name', '') and p.get('name') != 'No results found':
+                        valid_products.append(p)
             
-            if products:
+            if valid_products:
                 try:
-                    # Switch parsers here:
-                    # Option A: Use AI Parser
-                    # result = parse_products_ai(products, store_name, openrouter_api_key)
-                    # Option B: Use Regex Parser (Default)
-                    result = parse_products_regex(products, store_name)
-                    
+                    result = parse_products_regex(valid_products, store_name)
                     if result:
                         all_parsed.extend(result)
                 except Exception as e:

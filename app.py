@@ -16,11 +16,7 @@ from dotenv import load_dotenv
 
 # Import our custom modules
 from utils import match_products, sort_products, parse_price
-from database import (
-    save_search_results, get_price_history, get_all_tracked_products, 
-    get_price_comparison, get_product_by_name, get_db_stats,
-    get_price_trends
-)
+
 
 # Load environment variables
 load_dotenv()
@@ -32,12 +28,9 @@ NOON_COOKIES_FILE = 'Cookies/noon_minutes.json'
 CARREFOUR_COOKIES_FILE = 'Cookies/carrefour.json'
 AMAZON_COOKIES_FILE = 'Cookies/amazon_now.json'
 
-# Persistent browser pool
-_browser_pool = {
-    'carrefour': None,
-    'noon': None,
-    'amazon': None
-}
+# Persistent shared browser for Concurrency 1 optimization
+_shared_browser = None
+_loaded_cookies_domains = set()  # Track which domains have cookies already
 
 # Browser preload status
 _preload_status = {
@@ -95,58 +88,64 @@ def get_chrome_driver():
     print("[Browser] Initializing local Chrome...")
     return webdriver.Chrome(options=chrome_options)
 
-def get_or_create_browser(store_name, base_url, cookies_file=None):
-    """Get existing browser or create new one with cookies loaded"""
-    global _browser_pool
+def get_shared_browser():
+    """Get or create the single shared persistent browser session"""
+    global _shared_browser
     
-    # Return existing browser if available
-    if _browser_pool.get(store_name) is not None:
+    if _shared_browser is not None:
         try:
             # Test if browser is still alive
-            _browser_pool[store_name].current_url
-            return _browser_pool[store_name], False  # False = not newly created
+            _shared_browser.current_url
+            return _shared_browser
         except:
             # Browser died, clean up
-            _browser_pool[store_name] = None
+            print("[Browser] Shared browser session died, recreating...")
+            _shared_browser = None
     
-    # Create new browser
-    print(f"[{store_name}] Initializing new browser session...")
+    print("[Browser] Initializing new shared browser session...")
     driver = get_chrome_driver()
+    _shared_browser = driver
+    return driver
+
+def load_cookies_into_browser(driver, cookies_file, base_url):
+    """Load cookies for a specific store into the active session only once"""
+    global _loaded_cookies_domains
     
-    # OPTIMIZATION: Visit a lightweight page to set cookies before loading the heavy app
-    # This avoids loading the main application twice (once to set domain, once to apply cookies)
-    if cookies_file and os.path.exists(cookies_file):
-        try:
-            # Visit robots.txt to establish domain context quickly
-            parsed = urlparse(base_url)
-            domain_root = f"{parsed.scheme}://{parsed.netloc}"
-            driver.get(f"{domain_root}/robots.txt")
-            
-            with open(cookies_file, 'r') as f:
-                cookies = json.load(f)
-                cookie_count = 0
-                for cookie in cookies:
-                    try:
-                        selenium_cookie = {
-                            'name': cookie['name'],
-                            'value': cookie['value'],
-                            'domain': cookie['domain'],
-                            'path': cookie.get('path', '/'),
-                            'secure': cookie.get('secure', False)
-                        }
-                        driver.add_cookie(selenium_cookie)
-                        cookie_count += 1
-                    except:
-                        continue
-                print(f"[{store_name}] Added {cookie_count} cookies")
-        except Exception as e:
-            print(f"[{store_name}] Error loading cookies: {str(e)}")
-            
-    # Navigate to the actual application (now with cookies applied)
-    driver.get(base_url)
+    parsed = urlparse(base_url)
+    domain_root = f"{parsed.scheme}://{parsed.netloc}"
     
-    _browser_pool[store_name] = driver
-    return driver, True  # True = newly created
+    # Check if we already loaded cookies for this domain
+    if domain_root in _loaded_cookies_domains:
+        return
+        
+    if not cookies_file or not os.path.exists(cookies_file):
+        _loaded_cookies_domains.add(domain_root) # Mark as attempted
+        return
+        
+    try:
+        # Establish domain context
+        print(f"[Browser] Navigating to {domain_root}/robots.txt to set domain context...")
+        driver.get(f"{domain_root}/robots.txt")
+        
+        print(f"[Browser] Injecting cookies for {domain_root}...")
+        with open(cookies_file, 'r') as f:
+            cookies = json.load(f)
+            count = 0
+            for cookie in cookies:
+                try:
+                    driver.add_cookie({
+                        'name': cookie['name'],
+                        'value': cookie['value'],
+                        'domain': cookie['domain'],
+                        'path': cookie.get('path', '/'),
+                        'secure': cookie.get('secure', False)
+                    })
+                    count += 1
+                except: continue
+            print(f"[Browser] Successfully injected {count} cookies for {domain_root}")
+            _loaded_cookies_domains.add(domain_root)
+    except Exception as e:
+        print(f"[Browser] Cookie injection error for {domain_root}: {str(e)}")
 
 def detect_location(driver, store_name):
     """Detect delivery location from the page header"""
@@ -177,8 +176,9 @@ def search_carrefour(item):
     print(f"[Carrefour] Starting search for '{item}'...")
     location = None
     try:
-        # Get or create persistent browser
-        driver, is_new = get_or_create_browser('Carrefour', 'https://www.carrefouruae.com/mafuae/en/', CARREFOUR_COOKIES_FILE)
+        # Get shared browser and prepare it for this store
+        driver = get_shared_browser()
+        load_cookies_into_browser(driver, CARREFOUR_COOKIES_FILE, 'https://www.carrefouruae.com/')
         
         # Use cached location or detect if missing
         if not _browser_locations.get('carrefour'):
@@ -302,10 +302,9 @@ def search_noon(item):
     print(f"[Noon] Starting search for '{item}'...")
     location = None
     try:
-        # Get or create persistent browser
-        print("[Noon] Getting browser...")
-        driver, is_new = get_or_create_browser('Noon', 'https://minutes.noon.com/uae-en/', NOON_COOKIES_FILE)
-        print(f"[Noon] Browser ready (new={is_new})")
+        # Get shared browser and prepare it for this store
+        driver = get_shared_browser()
+        load_cookies_into_browser(driver, NOON_COOKIES_FILE, 'https://minutes.noon.com/')
         
         # Use cached location or detect if missing
         if not _browser_locations.get('noon'):
@@ -427,11 +426,9 @@ def search_amazon(item):
     print(f"[Amazon] Starting search for '{item}'...")
     location = None
     try:
-        # Get or create persistent browser
-        print("[Amazon] Getting browser...")
-        # Amazon grocery homepage
-        driver, is_new = get_or_create_browser('Amazon', 'https://www.amazon.ae/fmc/storefront?almBrandId=sAuWWBROaG', AMAZON_COOKIES_FILE)
-        print(f"[Amazon] Browser ready (new={is_new})")
+        # Get shared browser and prepare it for this store
+        driver = get_shared_browser()
+        load_cookies_into_browser(driver, AMAZON_COOKIES_FILE, 'https://www.amazon.ae/')
         
         # Use cached location or detect if missing
         if not _browser_locations.get('amazon'):
@@ -614,7 +611,10 @@ def search_talabat(item):
             elapsed = time.time() - start_time
             print(f"[Talabat] Completed in {elapsed:.2f}s - Found {len(products)} products")
             _search_status['talabat'] = 'complete'
-            return {'products': products if products else [{'name': 'No results found', 'price': 'N/A'}]}
+            return {
+                'products': products if products else [{'name': 'No results found', 'price': 'N/A'}],
+                'location': 'Talabat Mart - UAE'
+            }
         else:
             elapsed = time.time() - start_time
             print(f"[Talabat] Failed in {elapsed:.2f}s with status code {response.status_code}")
@@ -707,63 +707,6 @@ def search_lulu(item):
 def index():
     return render_template('index.html')
 
-@app.route('/analytics')
-def analytics():
-    """Analytics dashboard page"""
-    return render_template('analytics.html')
-
-@app.route('/api/analytics/stats')
-def analytics_stats():
-    """Get overall database statistics"""
-    try:
-        stats = get_db_stats()
-        return jsonify(stats)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/analytics/products')
-def analytics_products():
-    """Get all tracked products with latest prices"""
-    limit = request.args.get('limit', type=int)  # Defaults to None if not provided
-    try:
-        products = get_all_tracked_products(limit=limit)
-        return jsonify({'products': products})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/analytics/price-history/<int:product_id>')
-def analytics_price_history(product_id):
-    """Get price history for a specific product"""
-    days = request.args.get('days', 30, type=int)
-    try:
-        history = get_price_history(product_id, days=days)
-        return jsonify({'history': history})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/analytics/price-history-by-name')
-def analytics_price_history_by_name():
-    """Get price history for a product by its matched name"""
-    matched_name = request.args.get('name', '')
-    days = request.args.get('days', 30, type=int)
-    try:
-        product = get_product_by_name(matched_name)
-        if not product:
-            return jsonify({'history': [], 'product': None})
-        history = get_price_history(product['id'], days=days)
-        return jsonify({'history': history, 'product': product})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/analytics/comparison/<int:product_id>')
-def analytics_comparison(product_id):
-    """Get current price comparison across stores for a product"""
-    try:
-        comparison = get_price_comparison(product_id)
-        return jsonify(comparison)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
 @app.route('/status')
 def status():
     """Return browser preload status"""
@@ -774,70 +717,74 @@ def search_status():
     """Return active search status"""
     return jsonify(_search_status)
 
+@app.route('/search-granular', methods=['POST'])
+def search_granular():
+    """Endpoint for staged loading: searches a specific store"""
+    global _search_status
+    data = request.json
+    item = data.get('item', '')
+    store = data.get('store', '')
+    
+    if not item or not store:
+        return jsonify({'error': 'Missing item or store'}), 400
+        
+    print(f"[Staged-Search] Triggered: {store} search for '{item}'")
+    _search_status[store] = 'searching'
+    
+    try:
+        if store == 'carrefour': results = search_carrefour(item)
+        elif store == 'noon': results = search_noon(item)
+        elif store == 'amazon': results = search_amazon(item)
+        elif store == 'talabat': results = search_talabat(item)
+        elif store == 'lulu': results = search_lulu(item)
+        else: return jsonify({'error': 'Unknown store'}), 400
+        
+        _search_status[store] = 'complete'
+        
+        # Ensure dict format
+        if not isinstance(results, dict):
+            results = {'products': results, 'location': None}
+            
+        return jsonify({
+            'store': store,
+            'products': results.get('products', []),
+            'location': results.get('location')
+        })
+    except Exception as e:
+        print(f"[Staged-Search] Error in {store}: {str(e)}")
+        _search_status[store] = 'error'
+        return jsonify({'error': str(e), 'store': store}), 500
+
 @app.route('/search', methods=['POST'])
 def search():
-    global _search_status
+    """Initial fast search endpoint for staged loading"""
     item = request.json.get('item', '')
-    
     if not item:
         return jsonify({'error': 'Please enter an item to search'}), 400
     
-    # Reset search status
-    _search_status = {'carrefour': 'ready', 'noon': 'ready', 'amazon': 'ready', 'talabat': 'ready', 'lulu': 'ready'}
-    
-    # Search stores
-    # NOTE: Using sequential search because Browserless Concurrency Limit is 1
-    # Parallel search would cause "Session limit reached" errors
-    browserless_token = os.environ.get('BROWSERLESS_TOKEN')
-    
-    if browserless_token:
-        print("[Search] Using sequential mode due to Browserless concurrency limits")
+    print(f"[Fast-Search] Starting parallel API poll for '{item}'...")
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        talabat_future = executor.submit(search_talabat, item)
+        lulu_future = executor.submit(search_lulu, item)
+        
         raw_results = {
-            'carrefour': search_carrefour(item),
-            'noon': search_noon(item),
-            'amazon': search_amazon(item),
-            'talabat': search_talabat(item),
-            'lulu': search_lulu(item)
+            'talabat': talabat_future.result(),
+            'lulu': lulu_future.result()
         }
-    else:
-        # Local mode - parallel is fine
-        with ThreadPoolExecutor(max_workers=5) as executor:
-            carrefour_future = executor.submit(search_carrefour, item)
-            noon_future = executor.submit(search_noon, item)
-            amazon_future = executor.submit(search_amazon, item)
-            talabat_future = executor.submit(search_talabat, item)
-            lulu_future = executor.submit(search_lulu, item)
-            
-            raw_results = {
-                'carrefour': carrefour_future.result(),
-                'noon': noon_future.result(),
-                'amazon': amazon_future.result(),
-                'talabat': talabat_future.result(),
-                'lulu': lulu_future.result()
-            }
     
-    # Return raw results only
-    return jsonify({
-        'raw_results': raw_results,
-        'locations': {
-            'carrefour': raw_results.get('carrefour', {}).get('location'),
-            'noon': raw_results.get('noon', {}).get('location'),
-            'amazon': raw_results.get('amazon', {}).get('location'),
-        }
-    })
+    return jsonify({'raw_results': raw_results})
 
 @app.route('/match', methods=['POST'])
 def match():
     """Match products from raw results"""
     data = request.json
     raw_results = data.get('raw_results', {})
-    sort_by = data.get('sort_by', 'price')  # 'price' or 'quantity'
-    sort_order = data.get('sort_order', 'asc')  # 'asc' or 'desc'
+    sort_by = data.get('sort_by', 'price')
+    sort_order = data.get('sort_order', 'asc')
     
     if not raw_results:
         return jsonify({'error': 'No raw results provided'}), 400
     
-    # Get OpenRouter API key from environment
     openrouter_api_key = os.getenv('OPENROUTER_API_KEY')
     product_name = data.get('product_name', '')
     
@@ -848,27 +795,7 @@ def match():
     ascending = (sort_order == 'asc')
     sorted_products = sort_products(matched_products, sort_by=sort_by, ascending=ascending)
     
-    # Save to database in background (CDC Type 2 price tracking)
-    # We save first, then enrich if possible, though background saving means
-    # trends might only show on second search for new products.
-    try:
-        if sorted_products:
-            save_search_results(sorted_products) # Save synchronously for trend availability
-            
-            # Enrich with trends and IDs for Frontend
-            from utils import classify_text
-            for p in sorted_products:
-                p_db = get_product_by_name(p.get('matched_name'))
-                if p_db:
-                    p['trends'] = get_price_trends(p_db['id'])
-                    p['product_id'] = p_db['id']
-                    p['category'] = classify_text(p.get('matched_name'))
-    except Exception as e:
-        print(f"[Database] Error saving/enriching products: {str(e)}")
-    
-    return jsonify({
-        'matched_products': sorted_products
-    })
+    return jsonify({'matched_products': sorted_products})
 
 def preload_single_browser(store_name, base_url, cookies_file):
     """Preload a single browser"""
@@ -890,25 +817,41 @@ def preload_single_browser(store_name, base_url, cookies_file):
         print(f"[Startup] Error preloading {store_name}: {str(e)}")
 
 def preload_browsers():
-    """Preload browsers for faster first query"""
-    # NOTE: Sequential preloading if using Browserless due to Concurrency Limit 1
-    browserless_token = os.environ.get('BROWSERLESS_TOKEN')
+    """Preload shared browser for faster first query"""
+    global _preload_status
+    print("[Startup] Initializing shared browser session...")
     
-    if browserless_token:
-        print("[Startup] Preloading browsers sequentially (Browserless limit 1)...")
-        preload_single_browser('Carrefour', 'https://www.carrefouruae.com/mafuae/en/', CARREFOUR_COOKIES_FILE)
-        preload_single_browser('Noon', 'https://minutes.noon.com/uae-en/', NOON_COOKIES_FILE)
-        preload_single_browser('Amazon', 'https://www.amazon.ae/fmc/storefront?almBrandId=sAuWWBROaG', AMAZON_COOKIES_FILE)
-    else:
-        print("[Startup] Preloading browsers in parallel (Local)...")
-        with ThreadPoolExecutor(max_workers=3) as executor:
-            executor.submit(preload_single_browser, 'Carrefour', 'https://www.carrefouruae.com/mafuae/en/', CARREFOUR_COOKIES_FILE)
-            executor.submit(preload_single_browser, 'Noon', 'https://minutes.noon.com/uae-en/', NOON_COOKIES_FILE)
-            executor.submit(preload_single_browser, 'Amazon', 'https://www.amazon.ae/fmc/storefront?almBrandId=sAuWWBROaG', AMAZON_COOKIES_FILE)
+    try:
+        # Only start ONE browser for all stores
+        driver = get_shared_browser()
+        
+        # Warm up domains and load cookies sequentially
+        _preload_status['carrefour'] = 'loading'
+        load_cookies_into_browser(driver, CARREFOUR_COOKIES_FILE, 'https://www.carrefouruae.com/')
+        _preload_status['carrefour'] = 'ready'
+        
+        _preload_status['noon'] = 'loading'
+        load_cookies_into_browser(driver, NOON_COOKIES_FILE, 'https://minutes.noon.com/')
+        _preload_status['noon'] = 'ready'
+        
+        _preload_status['amazon'] = 'loading'
+        load_cookies_into_browser(driver, AMAZON_COOKIES_FILE, 'https://www.amazon.ae/')
+        _preload_status['amazon'] = 'ready'
+        
+        print("[Startup] Shared browser pre-warmed for all domains")
+    except Exception as e:
+        print(f"[Startup] Pre-warm failed: {str(e)}")
     
     print("[Startup] Browser preloading complete")
 
 if __name__ == '__main__':
+    # Print registered routes for verification
+    print("\n" + "="*50)
+    print("REGISTERED ROUTES:")
+    for rule in app.url_map.iter_rules():
+        print(f" - {rule.endpoint:20s} {rule}")
+    print("="*50 + "\n")
+
     # Start background scheduler for price refreshes
     def run_scheduled_scraping():
         """Background thread to refresh prices for tracked products."""
@@ -924,11 +867,9 @@ if __name__ == '__main__':
             except Exception as e:
                 print(f"[Scheduler] Error: {e}")
 
-    if os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
-        # Start preloading
-        threading.Thread(target=preload_browsers, daemon=True).start()
-        # Start scraper
-        threading.Thread(target=run_scheduled_scraping, daemon=True).start()
+    # Start preloading and scheduler
+    threading.Thread(target=preload_browsers, daemon=True).start()
+    threading.Thread(target=run_scheduled_scraping, daemon=True).start()
     
     # Production setup for Render/Railway
     port = int(os.environ.get("PORT", 9000))

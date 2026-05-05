@@ -489,7 +489,7 @@ async function searchGrocery() {
     const loading = document.getElementById('loading');
     const errorDiv = document.getElementById('error');
     const matchedResults = document.getElementById('matchedResults');
-    const rawResults = document.getElementById('rawResults');
+    const rawResultsSection = document.getElementById('rawResults');
     const mainColumn = document.getElementById('mainColumn');
 
     const item = input.value.trim();
@@ -500,55 +500,78 @@ async function searchGrocery() {
 
     errorDiv.innerHTML = '';
     matchedResults.innerHTML = '';
-    rawResults.innerHTML = '';
+    rawResultsSection.innerHTML = '';
 
     // Reset UI state
     mainColumn.style.display = 'none';
     document.getElementById('toggleRawBtn').style.display = 'none';
-
     loading.style.display = 'block';
     searchBtn.disabled = true;
+
+    // Initialize raw results structure with consistent format for the backend
+    currentRawResults = {
+        raw_results: {
+            carrefour: { products: [] },
+            noon: { products: [] },
+            amazon: { products: [] },
+            talabat: { products: [] },
+            lulu: { products: [] }
+        },
+        locations: {}
+    };
 
     searchStatusInterval = setInterval(pollSearchStatus, 400);
 
     try {
-        const response = await fetch('/search', {
+        // --- STEP 1: Fast API Search (Talabat & Lulu) ---
+        const fastResp = await fetch('/search', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ item })
         });
 
-        if (!response.ok) {
-            const data = await response.json().catch(() => ({}));
-            throw new Error(data.error || 'Search failed');
+        if (fastResp.ok) {
+            const data = await fastResp.json();
+            // Merge fast results
+            if (data.raw_results) {
+                if (data.raw_results.talabat) currentRawResults.raw_results.talabat = data.raw_results.talabat;
+                if (data.raw_results.lulu) currentRawResults.raw_results.lulu = data.raw_results.lulu;
+            }
+            renderRawResults(currentRawResults.raw_results);
+            await matchProducts();
         }
 
-        const data = await response.json();
-        currentRawResults = data;
-        renderRawResults(data.raw_results || data);
+        // --- STEP 2: Sequential Selenium Search ---
+        const seleniumStores = ['carrefour', 'noon', 'amazon'];
 
-        // Show location note
-        const locations = data.locations || {};
-        const locationNote = document.getElementById('locationNote');
-        const parts = [];
-        if (locations.carrefour) {
-            parts.push(`Carrefour: ${locations.carrefour}`);
+        for (const store of seleniumStores) {
+            try {
+                const resp = await fetch('/search-granular', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ item, store })
+                });
+
+                if (resp.ok) {
+                    const data = await resp.json();
+                    // Store as object with products list
+                    currentRawResults.raw_results[store] = {
+                        products: data.products || [],
+                        location: data.location
+                    };
+                    if (data.location) currentRawResults.locations[store] = data.location;
+
+                    // Update UI immediately (Incremental update)
+                    renderRawResults(currentRawResults.raw_results);
+                    updateLocationNote(currentRawResults.locations);
+                    await matchProducts();
+                }
+            } catch (err) {
+                console.error(`Error fetching ${store}:`, err);
+            }
         }
-        if (locations.noon) {
-            parts.push(`Noon: ${locations.noon}`);
-        }
-        if (locations.amazon) {
-            parts.push(`Amazon: ${locations.amazon}`);
-        }
-        locationNote.textContent = parts.length ? `Search locations · ${parts.join(' · ')}` : '';
 
-        locationNote.textContent = parts.length ? `Search locations · ${parts.join(' · ')}` : '';
-
-        // Hide Match button, trigger automatically
-        // matchBtn.style.display = 'block';
-        await matchProducts();
-
-        // Show toggle raw results button
+        // Final UI cleanup
         document.getElementById('toggleRawBtn').style.display = 'inline-flex';
 
     } catch (error) {
@@ -563,6 +586,16 @@ async function searchGrocery() {
         }
         await pollSearchStatus();
     }
+}
+
+function updateLocationNote(locations) {
+    const locationNote = document.getElementById('locationNote');
+    if (!locationNote) return;
+    const parts = [];
+    if (locations.carrefour) parts.push(`Carrefour: ${locations.carrefour}`);
+    if (locations.noon) parts.push(`Noon: ${locations.noon}`);
+    if (locations.amazon) parts.push(`Amazon: ${locations.amazon}`);
+    locationNote.textContent = parts.length ? `Search locations · ${parts.join(' · ')}` : '';
 }
 
 async function matchProducts() {
